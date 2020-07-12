@@ -1,15 +1,15 @@
 {
   "name": "getstats",
   "preferGlobal": true,
-  "version": "1.0.2",
+  "version": "1.0.9",
   "author": {
     "name": "Muaz Khan",
     "email": "muazkh@gmail.com",
-    "url": "http://www.muazkhan.com/"
+    "url": "https://muazkhan.com/"
   },
   "description": "A tiny JavaScript library using WebRTC getStats API to return peer connection stats i.e. bandwidth usage, packets lost, local/remote ip addresses and ports, type of connection etc.",
   "scripts": {
-    "start": "node getStats.js"
+    "start": "node server.js"
   },
   "main": "./getStats.js",
   "repository": {
@@ -35,7 +35,17 @@
     "url": "https://github.com/muaz-khan/getStats/issues",
     "email": "muazkh@gmail.com"
   },
-  "homepage": "https://www.webrtc-experiment.com/",
+  "homepage": "https://www.webrtc-experiment.com/getStats/",
   "_id": "getstats@",
-  "_from": "getstats@"
+  "_from": "getstats@",
+  "devDependencies": {
+    "grunt": "0.4.5",
+    "grunt-bump": "0.7.0",
+    "grunt-cli": "0.1.13",
+    "grunt-contrib-watch": "^1.1.0",
+    "grunt-contrib-concat": "0.5.1",
+    "grunt-contrib-uglify": "0.11.0",
+    "grunt-jsbeautifier": "0.2.10",
+    "load-grunt-tasks": "3.4.0"
+  }
 }

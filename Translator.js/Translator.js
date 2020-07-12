@@ -1,9 +1,9 @@
-// Last time updated at August 14, 2015, 05:46:23
+// Last time updated at Dec 31, 2016, 10:54:23
 
 // Muaz Khan      - www.MuazKhan.com
 // MIT License    - www.WebRTC-Experiment.com/licence
 
-// Source Code    - github.com/muaz-khan/WebRTC-Experiment/tree/master/Translator.js
+// Source Code    - github.com/muaz-khan/Translator
 // Demo           - www.webrtc-experiment.com/Translator
 
 function Translator() {
@@ -63,15 +63,58 @@ function Translator() {
         window[randomNumber] = function(response) {
             if (response.data && response.data.translations[0] && config.callback) {
                 config.callback(response.data.translations[0].translatedText);
+                return;
             }
+
             if(response.error && response.error.message == 'Daily Limit Exceeded') {
                 config.callback('Google says, "Daily Limit Exceeded". Please try this experiment a few hours later.');
+                return;
             }
+
+            if (response.error) {
+                console.error(response.error.message);
+                return;
+            }
+
+            console.error(response);
         };
 
         var source = 'https://www.googleapis.com/language/translate/v2?key=' + api_key + '&target=' + (config.to || 'en-US') + '&callback=window.' + randomNumber + '&q=' + sourceText;
         newScript.src = source;
         document.getElementsByTagName('head')[0].appendChild(newScript);
+    };
+
+    this.getListOfLanguages = function (callback, config) {
+        config = config || {};
+
+        var api_key = config.api_key || Google_Translate_API_KEY;
+
+        var xhr = new XMLHttpRequest();
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState == XMLHttpRequest.DONE) {
+                var response = JSON.parse(xhr.responseText);
+
+                if(response && response.data && response.data.languages) {
+                    callback(response.data.languages);
+                    return;
+                }
+
+                if (response.error && response.error.message === 'Daily Limit Exceeded') {
+                    console.error('Text translation failed. Error message: "Daily Limit Exceeded."');
+                    return;
+                }
+
+                if (response.error) {
+                    console.error(response.error.message);
+                    return;
+                }
+
+                console.error(response);
+            }
+        }
+        var url = 'https://www.googleapis.com/language/translate/v2/languages?key=' + api_key + '&target=en';
+        xhr.open('GET', url, true);
+        xhr.send(null);
     };
 
     var recognition;
@@ -99,11 +142,23 @@ function Translator() {
         };
 
         recognition.onend = function() {
+            if(recognition.dontReTry === true) {
+                return;
+            }
+
             initTranscript(callback, language);
         };
 
         recognition.onerror = function(e) {
-            console.error(e);
+            if(e.error === 'audio-capture') {
+                recognition.dontReTry = true;
+                alert('Failed capturing audio i.e. microphone. Please check console-logs for hints to fix this issue.');
+                console.error('No microphone was found. Ensure that a microphone is installed and that microphone settings are configured correctly. https://support.google.com/chrome/bin/answer.py?hl=en&answer=1407892');
+                console.error('Original', e.type, e.message.length || e);
+                return;
+            }
+
+            console.error(e.type, e.error, e.message);
         };
 
         recognition.start();

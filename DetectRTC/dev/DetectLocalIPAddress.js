@@ -1,109 +1,134 @@
-// via: https://github.com/diafygi/webrtc-ips
-function DetectLocalIPAddress(callback) {
-    getIPs(function(ip) {
-        //local IPs
-        if (ip.match(/^(192\.168\.|169\.254\.|10\.|172\.(1[6-9]|2\d|3[01]))/)) {
-            callback('Local: ' + ip);
-        }
+var regexIpv4Local = /^(192\.168\.|169\.254\.|10\.|172\.(1[6-9]|2\d|3[01]))/,
+    regexIpv4 = /([0-9]{1,3}(\.[0-9]{1,3}){3})/,
+    regexIpv6 = /[a-f0-9]{1,4}(:[a-f0-9]{1,4}){7}/;
 
-        //assume the rest are public IPs
-        else {
-            callback('Public: ' + ip);
+// via: https://github.com/diafygi/webrtc-ips
+function DetectLocalIPAddress(callback, stream) {
+    if (!DetectRTC.isWebRTCSupported) {
+        return;
+    }
+
+    var isPublic = true,
+        isIpv4 = true;
+    getIPs(function(ip) {
+        if (!ip) {
+            callback(); // Pass nothing to tell that ICE-gathering-ended
+        } else if (ip.match(regexIpv4Local)) {
+            isPublic = false;
+            callback('Local: ' + ip, isPublic, isIpv4);
+        } else if (ip.match(regexIpv6)) { //via https://ourcodeworld.com/articles/read/257/how-to-get-the-client-ip-address-with-javascript-only
+            isIpv4 = false;
+            callback('Public: ' + ip, isPublic, isIpv4);
+        } else {
+            callback('Public: ' + ip, isPublic, isIpv4);
         }
-    });
+    }, stream);
 }
 
-//get the IP addresses associated with an account
-function getIPs(callback) {
+function getIPs(callback, stream) {
+    if (typeof document === 'undefined' || typeof document.getElementById !== 'function') {
+        return;
+    }
+
     var ipDuplicates = {};
 
-    //compatibility for firefox and chrome
     var RTCPeerConnection = window.RTCPeerConnection || window.mozRTCPeerConnection || window.webkitRTCPeerConnection;
-    var useWebKit = !!window.webkitRTCPeerConnection;
 
-    // bypass naive webrtc blocking using an iframe
     if (!RTCPeerConnection) {
         var iframe = document.getElementById('iframe');
         if (!iframe) {
-            //<iframe id="iframe" sandbox="allow-same-origin" style="display: none"></iframe>
-            throw 'NOTE: you need to have an iframe in the page right above the script tag.';
+            return;
         }
         var win = iframe.contentWindow;
         RTCPeerConnection = win.RTCPeerConnection || win.mozRTCPeerConnection || win.webkitRTCPeerConnection;
-        useWebKit = !!win.webkitRTCPeerConnection;
     }
 
-    //minimal requirements for data connection
-    var mediaConstraints = {
-        optional: [{
-            RtpDataChannels: true
+    if (!RTCPeerConnection) {
+        return;
+    }
+
+    var peerConfig = null;
+
+    if (DetectRTC.browser === 'Chrome' && DetectRTC.browser.version < 58) {
+        // todo: add support for older Opera
+        peerConfig = {
+            optional: [{
+                RtpDataChannels: true
+            }]
+        };
+    }
+
+    var servers = {
+        iceServers: [{
+            urls: 'stun:stun.l.google.com:19302'
         }]
     };
 
-    //firefox already has a default stun server in about:config
-    //    media.peerconnection.default_iceservers =
-    //    [{"url": "stun:stun.services.mozilla.com"}]
-    var servers;
+    var pc = new RTCPeerConnection(servers, peerConfig);
 
-    //add same stun server for chrome
-    if (useWebKit) {
-        servers = {
-            iceServers: [{
-                urls: 'stun:stun.services.mozilla.com'
-            }]
-        };
-
-        if(typeof DetectRTC !== 'undefined' && DetectRTC.browser.isFirefox && DetectRTC.browser.version <= 38) {
-            servers[0] = {
-                url: servers[0].urls
-            };
+    if (stream) {
+        if (pc.addStream) {
+            pc.addStream(stream);
+        } else if (pc.addTrack && stream.getTracks()[0]) {
+            pc.addTrack(stream.getTracks()[0], stream);
         }
     }
 
-    //construct a new RTCPeerConnection
-    var pc = new RTCPeerConnection(servers, mediaConstraints);
-
     function handleCandidate(candidate) {
-        //match just the IP address
-        var ipRegex = /([0-9]{1,3}(\.[0-9]{1,3}){3})/;
-        var ipAddress = ipRegex.exec(candidate)[1];
+        if (!candidate) {
+            callback(); // Pass nothing to tell that ICE-gathering-ended
+            return;
+        }
 
-        //remove duplicates
+        var match = regexIpv4.exec(candidate);
+        if (!match) {
+            return;
+        }
+        var ipAddress = match[1];
+        var isPublic = (candidate.match(regexIpv4Local)),
+            isIpv4 = true;
+
         if (ipDuplicates[ipAddress] === undefined) {
-            callback(ipAddress);
+            callback(ipAddress, isPublic, isIpv4);
         }
 
         ipDuplicates[ipAddress] = true;
     }
 
-    //listen for candidate events
-    pc.onicecandidate = function(ice) {
-        //skip non-candidate events
-        if (ice.candidate) {
-            handleCandidate(ice.candidate.candidate);
+    // listen for candidate events
+    pc.onicecandidate = function(event) {
+        if (event.candidate && event.candidate.candidate) {
+            handleCandidate(event.candidate.candidate);
+        } else {
+            handleCandidate(); // Pass nothing to tell that ICE-gathering-ended
         }
     };
 
-    //create a bogus data channel
-    pc.createDataChannel('');
+    // create data channel
+    if (!stream) {
+        try {
+            pc.createDataChannel('sctp', {});
+        } catch (e) {}
+    }
 
-    //create an offer sdp
-    pc.createOffer(function(result) {
+    // create an offer sdp
+    if (DetectRTC.isPromisesSupported) {
+        pc.createOffer().then(function(result) {
+            pc.setLocalDescription(result).then(afterCreateOffer);
+        });
+    } else {
+        pc.createOffer(function(result) {
+            pc.setLocalDescription(result, afterCreateOffer, function() {});
+        }, function() {});
+    }
 
-        //trigger the stun server request
-        pc.setLocalDescription(result, function() {}, function() {});
-
-    }, function() {});
-
-    //wait for a while to let everything done
-    setTimeout(function() {
-        //read candidate info from local description
+    function afterCreateOffer() {
         var lines = pc.localDescription.sdp.split('\n');
 
         lines.forEach(function(line) {
-            if (line.indexOf('a=candidate:') === 0) {
+            if (line && line.indexOf('a=candidate:') === 0) {
                 handleCandidate(line);
             }
         });
-    }, 1000);
+    }
 }

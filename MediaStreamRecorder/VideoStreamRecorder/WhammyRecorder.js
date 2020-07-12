@@ -26,8 +26,11 @@ function WhammyRecorder(mediaStream) {
         if (mediaRecorder) {
             mediaRecorder.stop();
             clearTimeout(timeout);
+            this.onstop();
         }
     };
+
+    this.onstop = function() {};
 
     this.clearOldRecordedFrames = function() {
         if (mediaRecorder) {
@@ -56,4 +59,8 @@ function WhammyRecorder(mediaStream) {
     // Reference to "WhammyRecorder" object
     var mediaRecorder;
     var timeout;
+}
+
+if (typeof MediaStreamRecorder !== 'undefined') {
+    MediaStreamRecorder.WhammyRecorder = WhammyRecorder;
 }

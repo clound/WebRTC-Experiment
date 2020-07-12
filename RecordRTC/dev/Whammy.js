@@ -9,12 +9,15 @@
 /**
  * Whammy is a standalone class used by {@link RecordRTC} to bring video recording in Chrome. It is written by {@link https://github.com/antimatter15|antimatter15}
  * @summary A real time javascript webm encoder based on a canvas hack.
+ * @license {@link https://github.com/muaz-khan/RecordRTC/blob/master/LICENSE|MIT}
+ * @author {@link https://MuazKhan.com|Muaz Khan}
  * @typedef Whammy
  * @class
  * @example
  * var recorder = new Whammy().Video(15);
  * recorder.add(context || canvas || dataURL);
  * var output = recorder.compile();
+ * @see {@link https://github.com/muaz-khan/RecordRTC|RecordRTC Source Code}
  */
 
 var Whammy = (function() {
@@ -56,7 +59,7 @@ var Whammy = (function() {
 
     function processInWebWorker(_function) {
         var blob = URL.createObjectURL(new Blob([_function.toString(),
-            'this.onmessage =  function (e) {' + _function.name + '(e.data);}'
+            'this.onmessage =  function (eee) {' + _function.name + '(eee.data);}'
         ], {
             type: 'application/javascript'
         }));
@@ -428,3 +431,7 @@ var Whammy = (function() {
         Video: WhammyVideo
     };
 })();
+
+if (typeof RecordRTC !== 'undefined') {
+    RecordRTC.Whammy = Whammy;
+}

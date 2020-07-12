@@ -1,12 +1,54 @@
-# [Chrome desktopCapture extension](https://github.com/muaz-khan/Chrome-Extensions/tree/master/desktopCapture-p2p)
+# Chrome extension for WebRTC Screen Sharing
 
-This chrome extension not only captures content of screen, but also provides multi-user peer-to-peer screen streaming.
+<a target="_blank" href="https://chrome.google.com/webstore/detail/webrtc-desktop-sharing/nkemblooioekjnpfekmjhpgkackcajhg"><img alt="WebRTC Screen Sharing" src="https://lh3.googleusercontent.com/hoWYXBvzcszyre-LlNVq5i_lEFtqVXYrTJ8gnkVw35vv5xWyUx7sw8VPMrGXjHpxUcV0n3Ie=w640-h400-e365" title="WebRTC Screen Sharing"></img></a>
+
+<a target="_blank" href="https://chrome.google.com/webstore/detail/webrtc-desktop-sharing/nkemblooioekjnpfekmjhpgkackcajhg"><img alt="WebRTC Screen Sharing" src="https://lh3.googleusercontent.com/rUvbMYBGFgwbe_gzIj3qUwtlnemsvbHccSskM__tjFSIILN3D7QRS6P1LielPb90Wt2a4awmNg=w640-h400-e365" title="WebRTC Screen Sharing"></img></a>
 
 ## How to install?
 
+<a target="_blank" href="https://chrome.google.com/webstore/detail/webrtc-desktop-sharing/nkemblooioekjnpfekmjhpgkackcajhg"><img alt="Install Dessktop Sharing Extension" src="https://raw.github.com/GoogleChrome/chrome-app-samples/master/tryitnowbutton_small.png" title="Click here to install this sample from the Chrome Web Store"></img></a>
+
 * https://chrome.google.com/webstore/detail/webrtc-desktop-sharing/nkemblooioekjnpfekmjhpgkackcajhg
 
-## How to publish yourself?
+## How to view screen?
+
+Try any of the below URL. Replace `your_room_id` with real room-id:
+
+```
+https://www.webrtc-experiment.com/screen/?s=your_room_id
+```
+
+## Developer Notes
+
+1. Chrome extension can share your screen, tab, any application's window, camera, microphone and speakers.
+2. Clicking extension icon will generate a unique random room URL. You can share that URL with multiple users and all of them can view your screen.
+3. [RTCMultiConnection](https://github.com/muaz-khan/RTCMultiConnection) is a WebRTC library that is used for peer-to-peer WebRTC streaming.
+4. PubNub is used as a signaling method for handshake. However you can use [any WebRTC signaing option](https://github.com/muaz-khan/WebRTC-Experiment/blob/master/Signaling.md).
+5. You can replace or include your own STUN+TURN servers in the [IceServersHandler.js](https://github.com/muaz-khan/Chrome-Extensions/blob/master/desktopCapture-p2p/IceServersHandler.js) file.
+6. VP8 is currently default video codecs. However VP9 is recommended. You can always change codecs using options page.
+7. [getStats](https://github.com/muaz-khan/getStats) is a WebRTC library that is used for bandwidth & codecs detection. This library is optional. You can always remove it.
+
+## Before publishing it for your own business
+
+> This step is optional. You can keep using `webrtc-experiment.com` URL as a screen viewer.
+
+Open [desktop-capturing.js](https://github.com/muaz-khan/Chrome-Extensions/blob/master/desktopCapture-p2p/desktop-capturing.js) and find following line:
+
+```javascript
+var resultingURL = 'https://www.webrtc-experiment.com/screen/?s=' + connection.sessionid;
+```
+
+Replace above line with your own server/website:
+
+```javascript
+var resultingURL = 'https://yourWebSite.com/index.html?s=' + connection.sessionid;
+```
+
+You can find `index.html` here:
+
+* [desktopCapture-p2p/index.html](https://github.com/muaz-khan/Chrome-Extensions/blob/master/desktopCapture-p2p/index.html)
+
+## How to publish it for your own business?
 
 Make ZIP of the directory. Then navigate to [Chrome WebStore Developer Dashboard](https://chrome.google.com/webstore/developer/dashboard) and click **Add New Item** blue button.
 
@@ -14,52 +56,14 @@ To learn more about how to publish a chrome extension in Google App Store:
 
 * https://developer.chrome.com/webstore/publish
 
-## How to add inline-install button?
-
-**Make sure that you added and verified your webpage/domain using Google WebMaster tools.** Additional instructions available [here](https://support.google.com/webmasters/answer/35179?hl=en).
-
-```html
-<!DOCTYPE html>
-<html>
-    <head>
-        <!-- head; this <link> tag MUST be in <head> section -->
-        <link rel="chrome-webstore-item" href="https://chrome.google.com/webstore/detail/your-chrome-extension-id">
-    </head>
-    <body>
-        <!-- body; the button element that is used to invoke inline installation -->
-        <button onclick="" id="install-button" style="padding: 0;background: none;height: 61px;vertical-align: middle;cursor:pointer;">
-            <img src="https://www.webrtc-experiment.com/images/btn-install-chrome-extension.png" alt="Add to Chrome">
-        </button>
-        
-        <script>
-            document.querySelector('#inline-install').onclick = function() {
-                !!navigator.webkitGetUserMedia 
-                    && !!window.chrome 
-                    && !!chrome.webstore 
-                    && !!chrome.webstore.install && 
-                chrome.webstore.install(
-                    'https://chrome.google.com/webstore/detail/your-chrome-extension-id', 
-                    successCallback, 
-                    failureCallback
-                );
-            };
-            
-            function successCallback() {
-                location.reload();
-            }
-            
-            function failureCallback(error) {
-                alert(error);
-            }
-        </script>
-    </body>
-</html>
-```
-
 ## For more information
 
 For additional information, click [this link](https://github.com/muaz-khan/WebRTC-Experiment/blob/7cd04a81b30cdca2db159eb746e2714307640767/Chrome-Extensions/desktopCapture/README.md).
 
+## It is Open-Sourced!
+
+* https://github.com/muaz-khan/Chrome-Extensions/tree/master/desktopCapture-p2p
+
 ## License
 
-[Chrome-Extensions](https://github.com/muaz-khan/Chrome-Extensions) are released under [MIT licence](https://www.webrtc-experiment.com/licence/) . Copyright (c) [Muaz Khan](https://plus.google.com/+MuazKhan).
+[Chrome-Extensions](https://github.com/muaz-khan/Chrome-Extensions) are released under [MIT license](https://github.com/muaz-khan/Chrome-Extensions/blob/master/LICENSE) . Copyright (c) [Muaz Khan](https://MuazKhan.com).

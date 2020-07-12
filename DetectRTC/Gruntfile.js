@@ -7,6 +7,21 @@ module.exports = function(grunt) {
         scope: 'devDependencies'
     });
 
+    var versionNumber = grunt.file.readJSON('package.json').version;
+
+    var banner = '\'use strict\';\n\n';
+    banner += '// Last Updated On: <%= grunt.template.today("UTC:yyyy-mm-dd h:MM:ss TT Z") %>\n\n';
+
+    banner += '// ________________\n';
+    banner += '// DetectRTC v' + versionNumber + '\n\n';
+
+    banner += '// Open-Sourced: https://github.com/muaz-khan/DetectRTC\n\n';
+
+    banner += '// --------------------------------------------------\n';
+    banner += '// Muaz Khan     - www.MuazKhan.com\n';
+    banner += '// MIT License   - www.WebRTC-Experiment.com/licence\n';
+    banner += '// --------------------------------------------------\n\n';
+
     // configure project
     grunt.initConfig({
         // make node configurations available
@@ -14,34 +29,49 @@ module.exports = function(grunt) {
         concat: {
             options: {
                 stripBanners: true,
-                separator: '\n'
+                separator: '\n',
+                banner: banner
             },
             dist: {
                 src: [
                     'dev/head.js',
                     'dev/common.js',
                     'dev/getBrowserInfo.js',
+                    'dev/detectPrivateBrowsing.js',
                     'dev/isMobile.js',
+                    'dev/detectDesktopOS.js',
                     'dev/detectOSName.js',
                     'dev/detectCaptureStream.js',
                     'dev/DetectLocalIPAddress.js',
-                    'dev/CheckDeviceSupport.js',
-                    'dev/DetectRTC.js'
+                    'dev/checkDeviceSupport.js',
+                    'dev/DetectRTC.js',
+                    'dev/Objects.js',
+                    'dev/tail.js'
                 ],
-                dest: 'DetectRTC.js',
+                dest: './temp/DetectRTC.js',
             },
         },
-        jshint: {
-            options: {
-                ignores: [],
-                // use default .jshintrc files
-                jshintrc: true
-            },
-            files: ['DetectRTC.js']
+        replace: {
+            dist: {
+                options: {
+                    patterns: [{
+                        match: 'version',
+                        replacement: versionNumber
+                    }]
+                },
+                files: [{
+                    expand: true,
+                    flatten: true,
+                    src: ['./temp/DetectRTC.js'],
+                    dest: './'
+                }]
+            }
         },
+        clean: ['./temp'],
         uglify: {
             options: {
-                mangle: false
+                mangle: false,
+                banner: banner
             },
             my_target: {
                 files: {
@@ -51,6 +81,8 @@ module.exports = function(grunt) {
         },
         jsbeautifier: {
             files: [
+                'dev/*.js',
+                'test/*.js',
                 'DetectRTC.js',
                 'Gruntfile.js'
             ],
@@ -104,6 +136,15 @@ module.exports = function(grunt) {
                 pushTo: 'upstream',
                 gitDescribeOptions: '--tags --always --abbrev=1 --dirty=-d'
             }
+        },
+        watch: {
+            scripts: {
+                files: ['dev/*.js'],
+                tasks: ['concat', 'replace', 'jsbeautifier', 'uglify', 'clean'],
+                options: {
+                    spawn: false,
+                },
+            }
         }
     });
 
@@ -111,5 +152,6 @@ module.exports = function(grunt) {
 
     // set default tasks to run when grunt is called without parameters
     // http://gruntjs.com/api/grunt.task
-    grunt.registerTask('default', ['concat', 'jsbeautifier', 'jshint', 'uglify']);
+    grunt.registerTask('default', ['concat', 'replace', 'jsbeautifier', 'uglify', 'clean']);
+    grunt.loadNpmTasks('grunt-contrib-watch');
 };

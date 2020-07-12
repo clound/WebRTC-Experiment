@@ -1,42 +1,91 @@
-var webAudioMediaStreamSources = [];
+// globals.js
 
-function convertToAudioStream(mediaStream) {
-    if (!mediaStream) throw 'MediaStream is mandatory.';
-
-    if (mediaStream.getVideoTracks && !mediaStream.getVideoTracks().length) {
-        return mediaStream;
-    }
-
-    var context = new AudioContext();
-    var mediaStreamSource = context.createMediaStreamSource(mediaStream);
-
-    var destination = context.createMediaStreamDestination();
-    mediaStreamSource.connect(destination);
-
-    webAudioMediaStreamSources.push(mediaStreamSource);
-
-    return destination.stream;
+if (typeof cordova !== 'undefined') {
+    DetectRTC.isMobileDevice = true;
+    DetectRTC.browser.name = 'Chrome';
 }
 
-var isOpera = !!window.opera || navigator.userAgent.indexOf(' OPR/') >= 0;
-var isFirefox = typeof window.InstallTrigger !== 'undefined';
-var isSafari = Object.prototype.toString.call(window.HTMLElement).indexOf('Constructor') > 0;
-var isChrome = !!window.chrome && !isOpera;
-var isIE = !!document.documentMode;
+if (navigator && navigator.userAgent && navigator.userAgent.indexOf('Crosswalk') !== -1) {
+    DetectRTC.isMobileDevice = true;
+    DetectRTC.browser.name = 'Chrome';
+}
 
-var isPluginRTC = isSafari || isIE;
+function fireEvent(obj, eventName, args) {
+    if (typeof CustomEvent === 'undefined') {
+        return;
+    }
 
-var isMobileDevice = !!navigator.userAgent.match(/Android|iPhone|iPad|iPod|BlackBerry|IEMobile/i);
+    var eventDetail = {
+        arguments: args,
+        __exposedProps__: args
+    };
 
-// detect node-webkit
-var isNodeWebkit = !!(window.process && (typeof window.process == 'object') && window.process.versions && window.process.versions['node-webkit']);
+    var event = new CustomEvent(eventName, eventDetail);
+    obj.dispatchEvent(event);
+}
 
-window.MediaStream = window.MediaStream || window.webkitMediaStream;
-window.AudioContext = window.AudioContext || window.webkitAudioContext;
+function setHarkEvents(connection, streamEvent) {
+    if (!streamEvent.stream || !getTracks(streamEvent.stream, 'audio').length) return;
+
+    if (!connection || !streamEvent) {
+        throw 'Both arguments are required.';
+    }
+
+    if (!connection.onspeaking || !connection.onsilence) {
+        return;
+    }
+
+    if (typeof hark === 'undefined') {
+        throw 'hark.js not found.';
+    }
+
+    hark(streamEvent.stream, {
+        onspeaking: function() {
+            connection.onspeaking(streamEvent);
+        },
+        onsilence: function() {
+            connection.onsilence(streamEvent);
+        },
+        onvolumechange: function(volume, threshold) {
+            if (!connection.onvolumechange) {
+                return;
+            }
+            connection.onvolumechange(merge({
+                volume: volume,
+                threshold: threshold
+            }, streamEvent));
+        }
+    });
+}
+
+function setMuteHandlers(connection, streamEvent) {
+    if (!streamEvent.stream || !streamEvent.stream || !streamEvent.stream.addEventListener) return;
+
+    streamEvent.stream.addEventListener('mute', function(event) {
+        event = connection.streamEvents[streamEvent.streamid];
+
+        event.session = {
+            audio: event.muteType === 'audio',
+            video: event.muteType === 'video'
+        };
+
+        connection.onmute(event);
+    }, false);
+
+    streamEvent.stream.addEventListener('unmute', function(event) {
+        event = connection.streamEvents[streamEvent.streamid];
+
+        event.session = {
+            audio: event.unmuteType === 'audio',
+            video: event.unmuteType === 'video'
+        };
+
+        connection.onunmute(event);
+    }, false);
+}
 
 function getRandomString() {
-    // suggested by @rvulpescu from #154
-    if (window.crypto && crypto.getRandomValues && navigator.userAgent.indexOf('Safari') == -1) {
+    if (window.crypto && window.crypto.getRandomValues && navigator.userAgent.indexOf('Safari') === -1) {
         var a = window.crypto.getRandomValues(new Uint32Array(3)),
             token = '';
         for (var i = 0, l = a.length; i < l; i++) {
@@ -48,493 +97,261 @@ function getRandomString() {
     }
 }
 
-var chromeVersion = 50;
-var matchArray = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
-if (isChrome && matchArray && matchArray[2]) {
-    chromeVersion = parseInt(matchArray[2], 10);
+// Get HTMLAudioElement/HTMLVideoElement accordingly
+// todo: add API documentation for connection.autoCreateMediaElement
+
+function getRMCMediaElement(stream, callback, connection) {
+    if (!connection.autoCreateMediaElement) {
+        callback({});
+        return;
+    }
+
+    var isAudioOnly = false;
+    if (!getTracks(stream, 'video').length && !stream.isVideo && !stream.isScreen) {
+        isAudioOnly = true;
+    }
+
+    if (DetectRTC.browser.name === 'Firefox') {
+        if (connection.session.video || connection.session.screen) {
+            isAudioOnly = false;
+        }
+    }
+
+    var mediaElement = document.createElement(isAudioOnly ? 'audio' : 'video');
+
+    mediaElement.srcObject = stream;
+
+    mediaElement.setAttribute('autoplay', true);
+    mediaElement.setAttribute('playsinline', true);
+    mediaElement.setAttribute('controls', true);
+    mediaElement.setAttribute('muted', false);
+    mediaElement.setAttribute('volume', 1);
+
+    // http://goo.gl/WZ5nFl
+    // Firefox don't yet support onended for any stream (remote/local)
+    if (DetectRTC.browser.name === 'Firefox') {
+        var streamEndedEvent = 'ended';
+
+        if ('oninactive' in mediaElement) {
+            streamEndedEvent = 'inactive';
+        }
+
+        mediaElement.addEventListener(streamEndedEvent, function() {
+            // fireEvent(stream, streamEndedEvent, stream);
+            currentUserMediaRequest.remove(stream.idInstance);
+
+            if (stream.type === 'local') {
+                streamEndedEvent = 'ended';
+
+                if ('oninactive' in stream) {
+                    streamEndedEvent = 'inactive';
+                }
+
+                StreamsHandler.onSyncNeeded(stream.streamid, streamEndedEvent);
+
+                connection.attachStreams.forEach(function(aStream, idx) {
+                    if (stream.streamid === aStream.streamid) {
+                        delete connection.attachStreams[idx];
+                    }
+                });
+
+                var newStreamsArray = [];
+                connection.attachStreams.forEach(function(aStream) {
+                    if (aStream) {
+                        newStreamsArray.push(aStream);
+                    }
+                });
+                connection.attachStreams = newStreamsArray;
+
+                var streamEvent = connection.streamEvents[stream.streamid];
+
+                if (streamEvent) {
+                    connection.onstreamended(streamEvent);
+                    return;
+                }
+                if (this.parentNode) {
+                    this.parentNode.removeChild(this);
+                }
+            }
+        }, false);
+    }
+
+    var played = mediaElement.play();
+    if (typeof played !== 'undefined') {
+        var cbFired = false;
+        setTimeout(function() {
+            if (!cbFired) {
+                cbFired = true;
+                callback(mediaElement);
+            }
+        }, 1000);
+        played.then(function() {
+            if (cbFired) return;
+            cbFired = true;
+            callback(mediaElement);
+        }).catch(function(error) {
+            if (cbFired) return;
+            cbFired = true;
+            callback(mediaElement);
+        });
+    } else {
+        callback(mediaElement);
+    }
 }
 
-var firefoxVersion = 50;
-matchArray = navigator.userAgent.match(/Firefox\/(.*)/);
-if (isFirefox && matchArray && matchArray[1]) {
-    firefoxVersion = parseInt(matchArray[1], 10);
+// if IE
+if (!window.addEventListener) {
+    window.addEventListener = function(el, eventName, eventHandler) {
+        if (!el.attachEvent) {
+            return;
+        }
+        el.attachEvent('on' + eventName, eventHandler);
+    };
 }
+
+function listenEventHandler(eventName, eventHandler) {
+    window.removeEventListener(eventName, eventHandler);
+    window.addEventListener(eventName, eventHandler, false);
+}
+
+window.attachEventListener = function(video, type, listener, useCapture) {
+    video.addEventListener(type, listener, useCapture);
+};
+
+function removeNullEntries(array) {
+    var newArray = [];
+    array.forEach(function(item) {
+        if (item) {
+            newArray.push(item);
+        }
+    });
+    return newArray;
+}
+
 
 function isData(session) {
     return !session.audio && !session.video && !session.screen && session.data;
 }
 
 function isNull(obj) {
-    return typeof obj == 'undefined';
+    return typeof obj === 'undefined';
 }
 
 function isString(obj) {
-    return typeof obj == 'string';
+    return typeof obj === 'string';
 }
 
-function isEmpty(session) {
-    var length = 0;
-    for (var s in session) {
-        length++;
-    }
-    return length == 0;
+var MediaStream = window.MediaStream;
+
+if (typeof MediaStream === 'undefined' && typeof webkitMediaStream !== 'undefined') {
+    MediaStream = webkitMediaStream;
 }
 
-// this method converts array-buffer into string
-function ab2str(buf) {
-    var result = '';
-    try {
-        result = String.fromCharCode.apply(null, new Uint16Array(buf));
-    } catch (e) {}
-    return result;
-}
-
-// this method converts string into array-buffer
-function str2ab(str) {
-    if (!isString(str)) str = JSON.stringify(str);
-
-    var buf = new ArrayBuffer(str.length * 2); // 2 bytes for each char
-    var bufView = new Uint16Array(buf);
-    for (var i = 0, strLen = str.length; i < strLen; i++) {
-        bufView[i] = str.charCodeAt(i);
-    }
-    return buf;
-}
-
-function swap(arr) {
-    var swapped = [],
-        length = arr.length;
-    for (var i = 0; i < length; i++)
-        if (arr[i] && arr[i] !== true)
-            swapped.push(arr[i]);
-    return swapped;
-}
-
-function forEach(obj, callback) {
-    for (var item in obj) {
-        callback(obj[item], item);
-    }
-}
-
-var console = window.console || {
-    log: function() {},
-    error: function() {},
-    warn: function() {}
-};
-
-function log() {
-    console.log(arguments);
-}
-
-function error() {
-    console.error(arguments);
-}
-
-function warn() {
-    console.warn(arguments);
-}
-
-if (isChrome || isFirefox || isSafari) {
-    var log = console.log.bind(console);
-    var error = console.error.bind(console);
-    var warn = console.warn.bind(console);
-}
-
-function toStr(obj) {
-    return JSON.stringify(obj, function(key, value) {
-        if (value && value.sdp) {
-            log(value.sdp.type, '\t', value.sdp.sdp);
-            return '';
-        } else return value;
-    }, '\t');
-}
-
-function getLength(obj) {
-    var length = 0;
-    for (var o in obj)
-        if (o) length++;
-    return length;
-}
-
-// Get HTMLAudioElement/HTMLVideoElement accordingly
-
-function createMediaElement(stream, session) {
-    var mediaElement = document.createElement(stream.isAudio ? 'audio' : 'video');
-    mediaElement.id = stream.streamid;
-
-    if (isPluginRTC) {
-        var body = (document.body || document.documentElement);
-        body.insertBefore(mediaElement, body.firstChild);
-
-        setTimeout(function() {
-            Plugin.attachMediaStream(mediaElement, stream)
-        }, 1000);
-
-        return Plugin.attachMediaStream(mediaElement, stream);
-    }
-
-    // "mozSrcObject" is always preferred over "src"!!
-    mediaElement[isFirefox ? 'mozSrcObject' : 'src'] = isFirefox ? stream : window.webkitURL.createObjectURL(stream);
-
-    mediaElement.controls = true;
-    mediaElement.autoplay = !!session.remote;
-    mediaElement.muted = session.remote ? false : true;
-
-    // http://goo.gl/WZ5nFl
-    // Firefox don't yet support onended for any stream (remote/local)
-    isFirefox && mediaElement.addEventListener('ended', function() {
-        stream.onended();
-    }, false);
-
-    mediaElement.play();
-
-    return mediaElement;
-}
-
-var onStreamEndedHandlerFiredFor = {};
-
-function onStreamEndedHandler(streamedObject, connection) {
-    if (streamedObject.mediaElement && !streamedObject.mediaElement.parentNode) return;
-
-    if (onStreamEndedHandlerFiredFor[streamedObject.streamid]) return;
-    onStreamEndedHandlerFiredFor[streamedObject.streamid] = streamedObject;
-    connection.onstreamended(streamedObject);
-}
-
-var onLeaveHandlerFiredFor = {};
-
-function onLeaveHandler(event, connection) {
-    if (onLeaveHandlerFiredFor[event.userid]) return;
-    onLeaveHandlerFiredFor[event.userid] = event;
-    connection.onleave(event);
-}
-
-function takeSnapshot(args) {
-    var userid = args.userid;
-    var connection = args.connection;
-
-    function _takeSnapshot(video) {
-        var canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth || video.clientWidth;
-        canvas.height = video.videoHeight || video.clientHeight;
-
-        var context = canvas.getContext('2d');
-        context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-        connection.snapshots[userid] = canvas.toDataURL('image/png');
-        args.callback && args.callback(connection.snapshots[userid]);
-    }
-
-    if (args.mediaElement) return _takeSnapshot(args.mediaElement);
-
-    for (var stream in connection.streams) {
-        stream = connection.streams[stream];
-        if (stream.userid == userid && stream.stream && stream.stream.getVideoTracks && stream.stream.getVideoTracks().length) {
-            _takeSnapshot(stream.mediaElement);
-            continue;
-        }
-    }
-}
-
-function invokeMediaCaptured(connection) {
-    // to let user know that media resource has been captured
-    // now, he can share "sessionDescription" using sockets
-    if (connection.onMediaCaptured) {
-        connection.onMediaCaptured();
-        delete connection.onMediaCaptured;
-    }
-}
-
-function merge(mergein, mergeto) {
-    if (!mergein) mergein = {};
-    if (!mergeto) return mergein;
-
-    for (var item in mergeto) {
-        mergein[item] = mergeto[item];
-    }
-    return mergein;
-}
-
-function loadScript(src, onload) {
-    var script = document.createElement('script');
-    script.src = src;
-    script.onload = function() {
-        log('loaded resource:', src);
-        if (onload) onload();
-    };
-    document.documentElement.appendChild(script);
-}
-
-function capturePartOfScreen(args) {
-    var connection = args.connection;
-    var element = args.element;
-
-    if (!window.html2canvas) {
-        return loadScript(connection.resources.html2canvas, function() {
-            capturePartOfScreen(args);
-        });
-    }
-
-    if (isString(element)) {
-        element = document.querySelector(element);
-        if (!element) element = document.getElementById(element);
-    }
-    if (!element) throw 'HTML DOM Element is not accessible!';
-
-    // todo: store DOM element somewhere to minimize DOM querying issues
-
-    // html2canvas.js is used to take screenshots
-    html2canvas(element, {
-        onrendered: function(canvas) {
-            args.callback(canvas.toDataURL());
-        }
-    });
-}
-
-function initFileBufferReader(connection, callback) {
-    if (!window.FileBufferReader) {
-        loadScript(connection.resources.FileBufferReader, function() {
-            initFileBufferReader(connection, callback);
-        });
-        return;
-    }
-
-    function _private(chunk) {
-        chunk.userid = chunk.extra.userid;
-        return chunk;
-    }
-
-    var fileBufferReader = new FileBufferReader();
-    fileBufferReader.onProgress = function(chunk) {
-        connection.onFileProgress(_private(chunk), chunk.uuid);
-    };
-
-    fileBufferReader.onBegin = function(file) {
-        connection.onFileStart(_private(file));
-    };
-
-    fileBufferReader.onEnd = function(file) {
-        connection.onFileEnd(_private(file));
-    };
-
-    callback(fileBufferReader);
-}
-
-var screenFrame, loadedScreenFrame;
-
-function loadScreenFrame(skip) {
-    if (DetectRTC.screen.extensionid != ReservedExtensionID) {
-        return;
-    }
-
-    if (loadedScreenFrame) return;
-    if (!skip) return loadScreenFrame(true);
-
-    loadedScreenFrame = true;
-
-    var iframe = document.createElement('iframe');
-    iframe.onload = function() {
-        iframe.isLoaded = true;
-        log('Screen Capturing frame is loaded.');
-    };
-    iframe.src = 'https://www.webrtc-experiment.com/getSourceId/';
-    iframe.style.display = 'none';
-    (document.body || document.documentElement).appendChild(iframe);
-
-    screenFrame = {
-        postMessage: function() {
-            if (!iframe.isLoaded) {
-                setTimeout(screenFrame.postMessage, 100);
-                return;
-            }
-            iframe.contentWindow.postMessage({
-                captureSourceId: true
-            }, '*');
-        }
-    };
-}
-
-var iceFrame, loadedIceFrame;
-
-function loadIceFrame(callback, skip) {
-    if (loadedIceFrame) return;
-    if (!skip) return loadIceFrame(callback, true);
-
-    loadedIceFrame = true;
-
-    var iframe = document.createElement('iframe');
-    iframe.onload = function() {
-        iframe.isLoaded = true;
-
-        listenEventHandler('message', iFrameLoaderCallback);
-
-        function iFrameLoaderCallback(event) {
-            if (!event.data || !event.data.iceServers) return;
-            callback(event.data.iceServers);
-
-            // this event listener is no more needed
-            window.removeEventListener('message', iFrameLoaderCallback);
-        }
-
-        iframe.contentWindow.postMessage('get-ice-servers', '*');
-    };
-    iframe.src = 'https://cdn.webrtc-experiment.com/getIceServers/';
-    iframe.style.display = 'none';
-    (document.body || document.documentElement).appendChild(iframe);
-}
-
-function muteOrUnmute(e) {
-    var stream = e.stream,
-        root = e.root,
-        session = e.session || {},
-        enabled = e.enabled;
-
-    if (!session.audio && !session.video) {
-        if (!isString(session)) {
-            session = merge(session, {
-                audio: true,
-                video: true
+/*global MediaStream:true */
+if (typeof MediaStream !== 'undefined') {
+    if (!('stop' in MediaStream.prototype)) {
+        MediaStream.prototype.stop = function() {
+            this.getTracks().forEach(function(track) {
+                track.stop();
             });
-        } else {
-            session = {
-                audio: true,
-                video: true
-            };
-        }
-    }
-
-    // implementation from #68
-    if (session.type) {
-        if (session.type == 'remote' && root.type != 'remote') return;
-        if (session.type == 'local' && root.type != 'local') return;
-    }
-
-    log(enabled ? 'Muting' : 'UnMuting', 'session', toStr(session));
-
-    // enable/disable audio/video tracks
-
-    if (root.type == 'local' && session.audio && !!stream.getAudioTracks) {
-        var audioTracks = stream.getAudioTracks()[0];
-        if (audioTracks)
-            audioTracks.enabled = !enabled;
-    }
-
-    if (root.type == 'local' && (session.video || session.screen) && !!stream.getVideoTracks) {
-        var videoTracks = stream.getVideoTracks()[0];
-        if (videoTracks)
-            videoTracks.enabled = !enabled;
-    }
-
-    root.sockets.forEach(function(socket) {
-        if (root.type == 'local') {
-            socket.send({
-                streamid: root.streamid,
-                mute: !!enabled,
-                unmute: !enabled,
-                session: session
-            });
-        }
-
-        if (root.type == 'remote') {
-            socket.send({
-                promptMuteUnmute: true,
-                streamid: root.streamid,
-                mute: !!enabled,
-                unmute: !enabled,
-                session: session
-            });
-        }
-    });
-
-    if (root.type == 'remote') return;
-
-    // According to issue #135, onmute/onumute must be fired for self
-    // "fakeObject" is used because we need to keep session for renegotiated streams; 
-    // and MUST pass exact session over onStreamEndedHandler/onmute/onhold/etc. events.
-    var fakeObject = merge({}, root);
-    fakeObject.session = session;
-
-    fakeObject.isAudio = !!fakeObject.session.audio && !fakeObject.session.video;
-    fakeObject.isVideo = !!fakeObject.session.video;
-    fakeObject.isScreen = !!fakeObject.session.screen;
-
-    if (!!enabled) {
-        // if muted stream is negotiated
-        stream.preMuted = {
-            audio: stream.getAudioTracks().length && !stream.getAudioTracks()[0].enabled,
-            video: stream.getVideoTracks().length && !stream.getVideoTracks()[0].enabled
         };
-        root.rtcMultiConnection.onmute(fakeObject);
-    }
-
-    if (!enabled) {
-        stream.preMuted = {};
-        root.rtcMultiConnection.onunmute(fakeObject);
     }
 }
 
-var Firefox_Screen_Capturing_Warning = 'Make sure that you are using Firefox Nightly and you enabled: media.getusermedia.screensharing.enabled flag from about:config page. You also need to add your domain in "media.getusermedia.screensharing.allowed_domains" flag. If you are using WinXP then also enable "media.getusermedia.screensharing.allow_on_old_platforms" flag. NEVER forget to use "only" HTTPs for screen capturing!';
-var SCREEN_COMMON_FAILURE = 'HTTPs i.e. SSL-based URI is mandatory to use screen capturing.';
-var ReservedExtensionID = 'ajhifddimkapgcifgcodmmfdlknahffk';
+function isAudioPlusTab(connection, audioPlusTab) {
+    if (connection.session.audio && connection.session.audio === 'two-way') {
+        return false;
+    }
 
-// if application-developer deployed his own extension on Google App Store
-var useCustomChromeExtensionForScreenCapturing = document.domain.indexOf('webrtc-experiment.com') != -1;
+    if (DetectRTC.browser.name === 'Firefox' && audioPlusTab !== false) {
+        return true;
+    }
 
-function initHark(args) {
-    if (!window.hark) {
-        loadScript(args.connection.resources.hark, function() {
-            initHark(args);
+    if (DetectRTC.browser.name !== 'Chrome' || DetectRTC.browser.version < 50) return false;
+
+    if (typeof audioPlusTab === true) {
+        return true;
+    }
+
+    if (typeof audioPlusTab === 'undefined' && connection.session.audio && connection.session.screen && !connection.session.video) {
+        audioPlusTab = true;
+        return true;
+    }
+
+    return false;
+}
+
+function getAudioScreenConstraints(screen_constraints) {
+    if (DetectRTC.browser.name === 'Firefox') {
+        return true;
+    }
+
+    if (DetectRTC.browser.name !== 'Chrome') return false;
+
+    return {
+        mandatory: {
+            chromeMediaSource: screen_constraints.mandatory.chromeMediaSource,
+            chromeMediaSourceId: screen_constraints.mandatory.chromeMediaSourceId
+        }
+    };
+}
+
+window.iOSDefaultAudioOutputDevice = window.iOSDefaultAudioOutputDevice || 'speaker'; // earpiece or speaker
+
+function getTracks(stream, kind) {
+    if (!stream || !stream.getTracks) {
+        return [];
+    }
+
+    return stream.getTracks().filter(function(t) {
+        return t.kind === (kind || 'audio');
+    });
+}
+
+function isUnifiedPlanSupportedDefault() {
+    var canAddTransceiver = false;
+
+    try {
+        if (typeof RTCRtpTransceiver === 'undefined') return false;
+        if (!('currentDirection' in RTCRtpTransceiver.prototype)) return false;
+
+        var tempPc = new RTCPeerConnection();
+
+        try {
+            tempPc.addTransceiver('audio');
+            canAddTransceiver = true;
+        } catch (e) {}
+
+        tempPc.close();
+    } catch (e) {
+        canAddTransceiver = false;
+    }
+
+    return canAddTransceiver && isUnifiedPlanSuppored();
+}
+
+function isUnifiedPlanSuppored() {
+    var isUnifiedPlanSupported = false;
+
+    try {
+        var pc = new RTCPeerConnection({
+            sdpSemantics: 'unified-plan'
         });
-        return;
+
+        try {
+            var config = pc.getConfiguration();
+            if (config.sdpSemantics == 'unified-plan')
+                isUnifiedPlanSupported = true;
+            else if (config.sdpSemantics == 'plan-b')
+                isUnifiedPlanSupported = false;
+            else
+                isUnifiedPlanSupported = false;
+        } catch (e) {
+            isUnifiedPlanSupported = false;
+        }
+    } catch (e) {
+        isUnifiedPlanSupported = false;
     }
 
-    var connection = args.connection;
-    var streamedObject = args.streamedObject;
-    var stream = args.stream;
-
-    var options = {};
-    var speechEvents = hark(stream, options);
-
-    speechEvents.on('speaking', function() {
-        if (connection.onspeaking) {
-            connection.onspeaking(streamedObject);
-        }
-    });
-
-    speechEvents.on('stopped_speaking', function() {
-        if (connection.onsilence) {
-            connection.onsilence(streamedObject);
-        }
-    });
-
-    speechEvents.on('volume_change', function(volume, threshold) {
-        if (connection.onvolumechange) {
-            connection.onvolumechange(merge({
-                volume: volume,
-                threshold: threshold
-            }, streamedObject));
-        }
-    });
-}
-
-attachEventListener = function(video, type, listener, useCapture) {
-    video.addEventListener(type, listener, useCapture);
-};
-
-var Plugin = window.PluginRTC || {};
-window.onPluginRTCInitialized = function(pluginRTCObject) {
-    Plugin = pluginRTCObject;
-    MediaStreamTrack = Plugin.MediaStreamTrack;
-    RTCPeerConnection = Plugin.RTCPeerConnection;
-    RTCIceCandidate = Plugin.RTCIceCandidate;
-    RTCSessionDescription = Plugin.RTCSessionDescription;
-
-    log(isPluginRTC ? 'Java-Applet' : 'ActiveX', 'plugin has been loaded.');
-};
-if (!isEmpty(Plugin)) window.onPluginRTCInitialized(Plugin);
-
-// if IE or Safari
-if (isPluginRTC) {
-    loadScript('https://cdn.webrtc-experiment.com/Plugin.EveryWhere.js');
-    // loadScript('https://cdn.webrtc-experiment.com/Plugin.Temasys.js');
+    return isUnifiedPlanSupported;
 }

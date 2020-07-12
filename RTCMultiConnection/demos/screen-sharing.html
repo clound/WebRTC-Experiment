@@ -1,295 +1,315 @@
-<!--
-> Muaz Khan     - github.com/muaz-khan 
-> MIT License   - www.webrtc-experiment.com/licence
-> Documentation - www.RTCMultiConnection.org
--->
 <!DOCTYPE html>
-<html lang="en">
-
+<html lang="en" dir="ltr">
 <head>
-    <title>WebRTC Screen Sharing using RTCMultiConnection ® Muaz Khan</title>
-    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <link rel="author" type="text/html" href="https://plus.google.com/+MuazKhan">
-    <meta name="author" content="Muaz Khan">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-    <link rel="stylesheet" href="//cdn.webrtc-experiment.com/style.css">
-
-    <style>
-    audio,
-    video {
-        -moz-transition: all 1s ease;
-        -ms-transition: all 1s ease;
-        -o-transition: all 1s ease;
-        -webkit-transition: all 1s ease;
-        transition: all 1s ease;
-        vertical-align: top;
-        width: 100%;
-    }
-    
-    input {
-        border: 1px solid #d9d9d9;
-        border-radius: 1px;
-        font-size: 2em;
-        margin: .2em;
-        width: 30%;
-    }
-    
-    .setup {
-        border-bottom-left-radius: 0;
-        border-top-left-radius: 0;
-        font-size: 102%;
-        height: 47px;
-        margin-left: -9px;
-        margin-top: 8px;
-        position: absolute;
-    }
-    
-    p {
-        padding: 1em;
-    }
-    
-    li {
-        border-bottom: 1px solid rgb(189, 189, 189);
-        border-left: 1px solid rgb(189, 189, 189);
-        padding: .5em;
-    }
-    </style>
-    <script>
-    document.createElement('article');
-    document.createElement('footer');
-    </script>
-
-    <!-- scripts used for broadcasting -->
-    <script src="//cdn.webrtc-experiment.com/firebase.js">
-    </script>
-    <script src="//cdn.webrtc-experiment.com/RTCMultiConnection.js">
-    </script>
+  <meta charset="utf-8">
+  <title>Screen Sharing using RTCMultiConnection</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0">
+  <link rel="shortcut icon" href="/demos/logo.png">
+  <link rel="stylesheet" href="/demos/stylesheet.css">
+  <script src="/demos/menu.js"></script>
 </head>
-
 <body>
-    <article>
-        <header style="text-align: center;">
-            <h1>
-                <a href="https://www.webrtc-experiment.com/">WebRTC</a> Screen Sharing using
-                <a href="http://www.rtcmulticonnection.org/docs/" target="_blank">RTCMultiConnection</a>
-            </h1>
-            <p>
-                <a href="https://www.webrtc-experiment.com/">HOME</a>
-                <span> &copy; </span>
-                <a href="http://www.MuazKhan.com/" target="_blank">Muaz Khan</a> .
-                <a href="http://twitter.com/WebRTCWeb" target="_blank" title="Twitter profile for WebRTC Experiments">@WebRTCWeb</a> .
-                <a href="https://github.com/muaz-khan?tab=repositories" target="_blank" title="Github Profile">Github</a> .
-                <a href="https://github.com/muaz-khan/WebRTC-Experiment/issues?state=open" target="_blank">Latest issues</a> .
-                <a href="https://github.com/muaz-khan/WebRTC-Experiment/commits/master" target="_blank">What's New?</a>
-            </p>
-        </header>
+  <header>
+    <a class="logo" href="/"><img src="/demos/logo.png" alt="RTCMultiConnection"></a>
+    <a href="/" class="menu-explorer">Menu<img src="/demos/menu-icon.png" alt="Menu"></a>
+    <nav>
+      <li>
+        <a href="/">Home</a>
+      </li>
+      <li>
+        <a href="/demos/">Demos</a>
+      </li>
+      <li>
+        <a href="https://www.rtcmulticonnection.org/docs/getting-started/">Getting Started</a>
+      </li>
+      <li>
+        <a href="https://www.rtcmulticonnection.org/FAQ/">FAQ</a>
+      </li>
+      <li>
+        <a href="https://www.youtube.com/playlist?list=PLPRQUXAnRydKdyun-vjKPMrySoow2N4tl">YouTube</a>
+      </li>
+      <li>
+        <a href="https://github.com/muaz-khan/RTCMultiConnection/wiki">Wiki</a>
+      </li>
+      <li>
+        <a href="https://github.com/muaz-khan/RTCMultiConnection">Github</a>
+      </li>
+    </nav>
+  </header>
 
-        <div class="github-stargazers"></div>
+  <h1>
+    Screen Sharing using RTCMultiConnection
+    <p class="no-mobile">
+      Multi-user (one-to-many) screen sharing using star topology.
+    </p>
+  </h1>
 
-        <!-- just copy this <section> and next script -->
-        <section class="experiment">
-            <section>
-                <span>
-                    Private ??
-                    <a href="" target="_blank" title="Open this link in new tab. Then your room will be private!">
-                        <code>
-                            <strong id="unique-token">#123456789</strong>
-                        </code>
-                    </a>
-                </span>
+  <section class="make-center">
+    <input type="text" id="room-id" value="abcdef" autocorrect=off autocapitalize=off size=20>
+    <button id="open-room">Open Room</button>
+    <button id="join-room">Join Room</button>
+    <button id="open-or-join-room">Auto Open Or Join Room</button>
 
-                <input type="text" id="broadcast-name">
-                <button id="setup-new-broadcast" class="setup">Share Your Screen</button>
-            </section>
+    <div id="videos-container" style="margin: 20px 0;"></div>
 
-            <!-- list of all available broadcasting rooms -->
-            <table style="width: 100%;" id="rooms-list"></table>
+    <div id="room-urls" style="text-align: center;display: none;background: #F1EDED;margin: 15px -10px;border: 1px solid rgb(189, 189, 189);border-left: 0;border-right: 0;"></div>
+  </section>
 
-            <!-- local/remote videos container -->
-            <div id="videos-container"></div>
-        </section>
+<script src="/dist/RTCMultiConnection.js"></script>
+<script src="/node_modules/webrtc-adapter/out/adapter.js"></script>
+<script src="/socket.io/socket.io.js"></script>
 
-        <script>
-        // Muaz Khan     - https://github.com/muaz-khan
-        // MIT License   - https://www.webrtc-experiment.com/licence/
-        // Documentation - https://github.com/muaz-khan/RTCMultiConnection
+<!-- custom layout for HTML5 audio/video elements -->
+<link rel="stylesheet" href="/dev/getHTMLMediaElement.css">
+<script src="/dev/getHTMLMediaElement.js"></script>
+<script>
+// ......................................................
+// .......................UI Code........................
+// ......................................................
+document.getElementById('open-room').onclick = function() {
+    disableInputButtons();
+    connection.open(document.getElementById('room-id').value, function() {
+        showRoomURL(connection.sessionid);
+    });
+};
 
-        var connection = new RTCMultiConnection();
+document.getElementById('join-room').onclick = function() {
+    disableInputButtons();
 
-        // connection.trickleIce = false;
+    connection.sdpConstraints.mandatory = {
+        OfferToReceiveAudio: false,
+        OfferToReceiveVideo: true
+    };
+    connection.join(document.getElementById('room-id').value);
+};
 
-        // this code is used for screen-viewers only.
-        // screen sender will be overriding it later.
-        connection.sdpConstraints.mandatory = {
-            OfferToReceiveAudio: false,
-            OfferToReceiveVideo: true
-        };
-
-        connection.session = {
-            screen: true,
-            oneway: true
-        };
-
-        connection.onstream = function(e) {
-            e.mediaElement.width = 600;
-            videosContainer.insertBefore(e.mediaElement, videosContainer.firstChild);
-            rotateVideo(e.mediaElement);
-            scaleVideos();
-        };
-
-        function rotateVideo(mediaElement) {
-            mediaElement.style[navigator.mozGetUserMedia ? 'transform' : '-webkit-transform'] = 'rotate(0deg)';
-            setTimeout(function() {
-                mediaElement.style[navigator.mozGetUserMedia ? 'transform' : '-webkit-transform'] = 'rotate(360deg)';
-            }, 1000);
+document.getElementById('open-or-join-room').onclick = function() {
+    disableInputButtons();
+    connection.openOrJoin(document.getElementById('room-id').value, function(isRoomExist, roomid) {
+        if (isRoomExist === false && connection.isInitiator === true) {
+            // if room doesn't exist, it means that current user will create the room
+            showRoomURL(roomid);
         }
 
-        connection.onstreamended = function(e) {
-            e.mediaElement.style.opacity = 0;
-            rotateVideo(e.mediaElement);
-            setTimeout(function() {
-                if (e.mediaElement.parentNode) {
-                    e.mediaElement.parentNode.removeChild(e.mediaElement);
-                }
-                scaleVideos();
-            }, 1000);
-        };
+        if(isRoomExist) {
+          connection.sdpConstraints.mandatory = {
+              OfferToReceiveAudio: false,
+              OfferToReceiveVideo: true
+          };
+        }
+    });
+};
 
-        var sessions = {};
-        connection.onNewSession = function(session) {
-            if (sessions[session.sessionid]) return;
-            sessions[session.sessionid] = session;
+// ......................................................
+// ..................RTCMultiConnection Code.............
+// ......................................................
 
-            var tr = document.createElement('tr');
-            tr.innerHTML = '<td><strong>' + session.extra['session-name'] + '</strong> is sharing his screen!</td>' +
-                '<td><button class="join">View His Screen</button></td>';
-            roomsList.insertBefore(tr, roomsList.firstChild);
+var connection = new RTCMultiConnection();
 
-            var joinRoomButton = tr.querySelector('.join');
-            joinRoomButton.setAttribute('data-sessionid', session.sessionid);
-            joinRoomButton.onclick = function() {
-                this.disabled = true;
+// by default, socket.io server is assumed to be deployed on your own URL
+connection.socketURL = '/';
 
-                var sessionid = this.getAttribute('data-sessionid');
-                session = sessions[sessionid];
+// comment-out below line if you do not have your own socket.io server
+// connection.socketURL = 'https://rtcmulticonnection.herokuapp.com:443/';
 
-                if (!session) throw 'No such session exists.';
+connection.socketMessageEvent = 'screen-sharing-demo';
 
-                session.join();
-            };
-        };
+connection.session = {
+    screen: true,
+    oneway: true
+};
 
-        var videosContainer = document.getElementById('videos-container') || document.body;
-        var roomsList = document.getElementById('rooms-list');
+connection.sdpConstraints.mandatory = {
+    OfferToReceiveAudio: false,
+    OfferToReceiveVideo: false
+};
 
-        document.getElementById('setup-new-broadcast').onclick = function() {
-            this.disabled = true;
-            connection.extra = {
-                'session-name': document.getElementById('broadcast-name').value || 'Anonymous'
-            };
+// https://www.rtcmulticonnection.org/docs/iceServers/
+// use your own TURN-server here!
+connection.iceServers = [{
+    'urls': [
+        'stun:stun.l.google.com:19302',
+        'stun:stun1.l.google.com:19302',
+        'stun:stun2.l.google.com:19302',
+        'stun:stun.l.google.com:19302?transport=udp',
+    ]
+}];
 
-            // screen sender don't need to receive any media.
-            // so both media-lines must be "sendonly".
-            connection.sdpConstraints.mandatory = {
-                OfferToReceiveAudio: false,
-                OfferToReceiveVideo: false
-            };
+connection.videosContainer = document.getElementById('videos-container');
+connection.onstream = function(event) {
+    var existing = document.getElementById(event.streamid);
+    if(existing && existing.parentNode) {
+      existing.parentNode.removeChild(existing);
+    }
 
-            connection.open();
-        };
+    event.mediaElement.removeAttribute('src');
+    event.mediaElement.removeAttribute('srcObject');
+    event.mediaElement.muted = true;
+    event.mediaElement.volume = 0;
 
-        // setup signaling to search existing sessions
-        connection.connect();
+    var video = document.createElement('video');
 
-        (function() {
-            var uniqueToken = document.getElementById('unique-token');
-            if (uniqueToken)
-                if (location.hash.length > 2) uniqueToken.parentNode.parentNode.parentNode.innerHTML = '<h2 style="text-align:center;"><a href="' + location.href + '" target="_blank">Share this link</a></h2>';
-                else uniqueToken.innerHTML = uniqueToken.parentNode.parentNode.href = '#' + (Math.random() * new Date().getTime()).toString(36).toUpperCase().replace(/\./g, '-');
-        })();
+    try {
+        video.setAttributeNode(document.createAttribute('autoplay'));
+        video.setAttributeNode(document.createAttribute('playsinline'));
+    } catch (e) {
+        video.setAttribute('autoplay', true);
+        video.setAttribute('playsinline', true);
+    }
 
-        function scaleVideos() {
-            var videos = document.querySelectorAll('video'),
-                length = videos.length,
-                video;
+    if(event.type === 'local') {
+      video.volume = 0;
+      try {
+          video.setAttributeNode(document.createAttribute('muted'));
+      } catch (e) {
+          video.setAttribute('muted', true);
+      }
+    }
+    video.srcObject = event.stream;
 
-            var minus = 130;
-            var windowHeight = 700;
-            var windowWidth = 600;
-            var windowAspectRatio = windowWidth / windowHeight;
-            var videoAspectRatio = 4 / 3;
-            var blockAspectRatio;
-            var tempVideoWidth = 0;
-            var maxVideoWidth = 0;
+    var width = innerWidth - 80;
+    var mediaElement = getHTMLMediaElement(video, {
+        title: event.userid,
+        buttons: ['full-screen'],
+        width: width,
+        showOnMouseEnter: false
+    });
 
-            for (var i = length; i > 0; i--) {
-                blockAspectRatio = i * videoAspectRatio / Math.ceil(length / i);
-                if (blockAspectRatio <= windowAspectRatio) {
-                    tempVideoWidth = videoAspectRatio * windowHeight / Math.ceil(length / i);
-                } else {
-                    tempVideoWidth = windowWidth / i;
-                }
-                if (tempVideoWidth > maxVideoWidth)
-                    maxVideoWidth = tempVideoWidth;
-            }
-            for (var i = 0; i < length; i++) {
-                video = videos[i];
-                if (video)
-                    video.width = maxVideoWidth - minus;
-            }
+    connection.videosContainer.appendChild(mediaElement);
+
+    setTimeout(function() {
+        mediaElement.media.play();
+    }, 5000);
+
+    mediaElement.id = event.streamid;
+};
+
+connection.onstreamended = function(event) {
+    var mediaElement = document.getElementById(event.streamid);
+    if (mediaElement) {
+        mediaElement.parentNode.removeChild(mediaElement);
+
+        if(event.userid === connection.sessionid && !connection.isInitiator) {
+          alert('Broadcast is ended. We will reload this page to clear the cache.');
+          location.reload();
+        }
+    }
+};
+
+connection.onMediaError = function(e) {
+    if (e.message === 'Concurrent mic process limit.') {
+        if (DetectRTC.audioInputDevices.length <= 1) {
+            alert('Please select external microphone. Check github issue number 483.');
+            return;
         }
 
-        window.onresize = scaleVideos;
-        </script>
+        var secondaryMic = DetectRTC.audioInputDevices[1].deviceId;
+        connection.mediaConstraints.audio = {
+            deviceId: secondaryMic
+        };
 
-        <section class="experiment">
-            <h2>Pre-Requisites?</h2>
-            <ol>
-                <li>
-                    Chrome?
-                    <a href="https://chrome.google.com/webstore/detail/screen-capturing/ajhifddimkapgcifgcodmmfdlknahffk" target="_blank">Install chrome extension</a>.
-                    <button onclick="!!navigator.webkitGetUserMedia && !!window.chrome && !!chrome.webstore && !!chrome.webstore.install && chrome.webstore.install('https://chrome.google.com/webstore/detail/ajhifddimkapgcifgcodmmfdlknahffk', function() {location.reload();})" id="install-button" style="padding: 0;background: none;height: 61px;vertical-align: middle;cursor:pointer;">
-                        <img src="https://www.webrtc-experiment.com/images/btn-install-chrome-extension.png" alt="Add to Chrome">
-                    </button>
-                    / <a href="https://github.com/muaz-khan/Chrome-Extensions/tree/master/desktopCapture">Source Code</a>
-                </li>
+        connection.join(connection.sessionid);
+    }
+};
 
-                <li>
-                    Firefox? <a href="https://addons.mozilla.org/en-US/firefox/addon/enable-screen-capturing/">Install Firefox Extension</a> / <a href="https://github.com/muaz-khan/Firefox-Extensions/tree/master/enable-screen-capturing">Source Code</a>
-                </li>
-            </ol>
-        </section>
+// ..................................
+// ALL below scripts are redundant!!!
+// ..................................
 
-        <section class="experiment">
-            <h2 class="header" id="feedback">Feedback</h2>
-            <div>
-                <textarea id="message" style="border: 1px solid rgb(189, 189, 189); height: 8em; margin: .2em; outline: none; resize: vertical; width: 98%;" placeholder="Have any message? Suggestions or something went wrong?"></textarea>
-            </div>
-            <button id="send-message" style="font-size: 1em;">Send Message</button>
-            <small style="margin-left: 1em;">Enter your email too; if you want "direct" reply!</small>
-        </section>
+function disableInputButtons() {
+    document.getElementById('room-id').onkeyup();
 
-        <section class="experiment own-widgets latest-commits">
-            <h2 class="header" id="updates" style="color: red; padding-bottom: .1em;"><a href="https://github.com/muaz-khan/WebRTC-Experiment/commits/master" target="_blank">Latest Updates</a>
-            </h2>
-            <div id="github-commits"></div>
-        </section>
-    </article>
+    document.getElementById('open-or-join-room').disabled = true;
+    document.getElementById('open-room').disabled = true;
+    document.getElementById('join-room').disabled = true;
+    document.getElementById('room-id').disabled = true;
+}
 
-    <a href="https://github.com/muaz-khan/RTCMultiConnection" class="fork-left"></a>
+// ......................................................
+// ......................Handling Room-ID................
+// ......................................................
 
-    <footer>
-        <a href="https://www.webrtc-experiment.com/" target="_blank">WebRTC Experiments!</a> and
-        <a href="http://www.RTCMultiConnection.org/docs/" target="_blank">RTCMultiConnection.js</a> ©
-        <a href="mailto:muazkh@gmail.com" target="_blank">Muaz Khan</a>:
-        <a href="https://twitter.com/WebRTCWeb" target="_blank">@WebRTCWeb</a>
-    </footer>
+function showRoomURL(roomid) {
+    var roomHashURL = '#' + roomid;
+    var roomQueryStringURL = '?roomid=' + roomid;
 
-    <!-- commits.js is useless for you! -->
-    <script src="//cdn.webrtc-experiment.com/commits.js" async>
-    </script>
+    var html = '<h2>Unique URL for your room:</h2><br>';
+
+    html += 'Hash URL: <a href="' + roomHashURL + '" target="_blank">' + roomHashURL + '</a>';
+    html += '<br>';
+    html += 'QueryString URL: <a href="' + roomQueryStringURL + '" target="_blank">' + roomQueryStringURL + '</a>';
+
+    var roomURLsDiv = document.getElementById('room-urls');
+    roomURLsDiv.innerHTML = html;
+
+    roomURLsDiv.style.display = 'block';
+}
+
+(function() {
+    var params = {},
+        r = /([^&=]+)=?([^&]*)/g;
+
+    function d(s) {
+        return decodeURIComponent(s.replace(/\+/g, ' '));
+    }
+    var match, search = window.location.search;
+    while (match = r.exec(search.substring(1)))
+        params[d(match[1])] = d(match[2]);
+    window.params = params;
+})();
+
+var roomid = '';
+if (localStorage.getItem(connection.socketMessageEvent)) {
+    roomid = localStorage.getItem(connection.socketMessageEvent);
+} else {
+    roomid = connection.token();
+}
+document.getElementById('room-id').value = roomid;
+document.getElementById('room-id').onkeyup = function() {
+    localStorage.setItem(connection.socketMessageEvent, document.getElementById('room-id').value);
+};
+
+var hashString = location.hash.replace('#', '');
+if (hashString.length && hashString.indexOf('comment-') == 0) {
+    hashString = '';
+}
+
+var roomid = params.roomid;
+if (!roomid && hashString.length) {
+    roomid = hashString;
+}
+
+if (roomid && roomid.length) {
+    document.getElementById('room-id').value = roomid;
+    localStorage.setItem(connection.socketMessageEvent, roomid);
+
+    // auto-join-room
+    (function reCheckRoomPresence() {
+        connection.checkPresence(roomid, function(isRoomExist) {
+            if (isRoomExist) {
+                connection.join(roomid);
+                return;
+            }
+
+            setTimeout(reCheckRoomPresence, 5000);
+        });
+    })();
+
+    disableInputButtons();
+}
+
+// detect 2G
+if(navigator.connection &&
+   navigator.connection.type === 'cellular' &&
+   navigator.connection.downlinkMax <= 0.115) {
+  alert('2G is not supported. Please use a better internet service.');
+}
+</script>
+
+  <footer>
+    <small id="send-message"></small>
+  </footer>
+
+  <script src="https://www.webrtc-experiment.com/common.js"></script>
 </body>
-
 </html>

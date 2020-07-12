@@ -4,24 +4,74 @@
 /**
  * CanvasRecorder is a standalone class used by {@link RecordRTC} to bring HTML5-Canvas recording into video WebM. It uses HTML2Canvas library and runs top over {@link Whammy}.
  * @summary HTML2Canvas recording into video WebM.
+ * @license {@link https://github.com/muaz-khan/RecordRTC/blob/master/LICENSE|MIT}
+ * @author {@link https://MuazKhan.com|Muaz Khan}
  * @typedef CanvasRecorder
  * @class
  * @example
- * var recorder = new CanvasRecorder(htmlElement, { disableLogs: true });
+ * var recorder = new CanvasRecorder(htmlElement, { disableLogs: true, useWhammyRecorder: true });
  * recorder.record();
  * recorder.stop(function(blob) {
  *     video.src = URL.createObjectURL(blob);
  * });
+ * @see {@link https://github.com/muaz-khan/RecordRTC|RecordRTC Source Code}
  * @param {HTMLElement} htmlElement - querySelector/getElementById/getElementsByTagName[0]/etc.
  * @param {object} config - {disableLogs:true, initCallback: function}
  */
 
 function CanvasRecorder(htmlElement, config) {
     if (typeof html2canvas === 'undefined') {
-        throw 'Please link: //cdn.webrtc-experiment.com/screenshot.js';
+        throw 'Please link: https://www.webrtc-experiment.com/screenshot.js';
     }
 
     config = config || {};
+    if (!config.frameInterval) {
+        config.frameInterval = 10;
+    }
+
+    // via DetectRTC.js
+    var isCanvasSupportsStreamCapturing = false;
+    ['captureStream', 'mozCaptureStream', 'webkitCaptureStream'].forEach(function(item) {
+        if (item in document.createElement('canvas')) {
+            isCanvasSupportsStreamCapturing = true;
+        }
+    });
+
+    var _isChrome = (!!window.webkitRTCPeerConnection || !!window.webkitGetUserMedia) && !!window.chrome;
+
+    var chromeVersion = 50;
+    var matchArray = navigator.userAgent.match(/Chrom(e|ium)\/([0-9]+)\./);
+    if (_isChrome && matchArray && matchArray[2]) {
+        chromeVersion = parseInt(matchArray[2], 10);
+    }
+
+    if (_isChrome && chromeVersion < 52) {
+        isCanvasSupportsStreamCapturing = false;
+    }
+
+    if (config.useWhammyRecorder) {
+        isCanvasSupportsStreamCapturing = false;
+    }
+
+    var globalCanvas, mediaStreamRecorder;
+
+    if (isCanvasSupportsStreamCapturing) {
+        if (!config.disableLogs) {
+            console.log('Your browser supports both MediRecorder API and canvas.captureStream!');
+        }
+
+        if (htmlElement instanceof HTMLCanvasElement) {
+            globalCanvas = htmlElement;
+        } else if (htmlElement instanceof CanvasRenderingContext2D) {
+            globalCanvas = htmlElement.canvas;
+        } else {
+            throw 'Please pass either HTMLCanvasElement or CanvasRenderingContext2D.';
+        }
+    } else if (!!navigator.mozGetUserMedia) {
+        if (!config.disableLogs) {
+            console.error('Canvas recording is NOT supported in Firefox.');
+        }
+    }
 
     var isRecording;
 
@@ -34,12 +84,71 @@ function CanvasRecorder(htmlElement, config) {
      */
     this.record = function() {
         isRecording = true;
-        whammy.frames = [];
-        drawCanvasFrame();
+
+        if (isCanvasSupportsStreamCapturing && !config.useWhammyRecorder) {
+            // CanvasCaptureMediaStream
+            var canvasMediaStream;
+            if ('captureStream' in globalCanvas) {
+                canvasMediaStream = globalCanvas.captureStream(25); // 25 FPS
+            } else if ('mozCaptureStream' in globalCanvas) {
+                canvasMediaStream = globalCanvas.mozCaptureStream(25);
+            } else if ('webkitCaptureStream' in globalCanvas) {
+                canvasMediaStream = globalCanvas.webkitCaptureStream(25);
+            }
+
+            try {
+                var mdStream = new MediaStream();
+                mdStream.addTrack(getTracks(canvasMediaStream, 'video')[0]);
+                canvasMediaStream = mdStream;
+            } catch (e) {}
+
+            if (!canvasMediaStream) {
+                throw 'captureStream API are NOT available.';
+            }
+
+            // Note: Jan 18, 2016 status is that, 
+            // Firefox MediaRecorder API can't record CanvasCaptureMediaStream object.
+            mediaStreamRecorder = new MediaStreamRecorder(canvasMediaStream, {
+                mimeType: config.mimeType || 'video/webm'
+            });
+            mediaStreamRecorder.record();
+        } else {
+            whammy.frames = [];
+            lastTime = new Date().getTime();
+            drawCanvasFrame();
+        }
 
         if (config.initCallback) {
             config.initCallback();
         }
+    };
+
+    this.getWebPImages = function(callback) {
+        if (htmlElement.nodeName.toLowerCase() !== 'canvas') {
+            callback();
+            return;
+        }
+
+        var framesLength = whammy.frames.length;
+        whammy.frames.forEach(function(frame, idx) {
+            var framesRemaining = framesLength - idx;
+            if (!config.disableLogs) {
+                console.log(framesRemaining + '/' + framesLength + ' frames remaining');
+            }
+
+            if (config.onEncodingCallback) {
+                config.onEncodingCallback(framesRemaining, framesLength);
+            }
+
+            var webp = frame.image.toDataURL('image/webp', 1);
+            whammy.frames[idx].image = webp;
+        });
+
+        if (!config.disableLogs) {
+            console.log('Generating WebM');
+        }
+
+        callback();
     };
 
     /**
@@ -57,28 +166,39 @@ function CanvasRecorder(htmlElement, config) {
 
         var that = this;
 
-        /**
-         * @property {Blob} blob - Recorded frames in video/webm blob.
-         * @memberof CanvasRecorder
-         * @example
-         * recorder.stop(function() {
-         *     var blob = recorder.blob;
-         * });
-         */
-        whammy.compile(function(blob) {
-            that.blob = blob;
+        if (isCanvasSupportsStreamCapturing && mediaStreamRecorder) {
+            mediaStreamRecorder.stop(callback);
+            return;
+        }
 
-            if (that.blob.forEach) {
-                that.blob = new Blob([], {
-                    type: 'video/webm'
-                });
-            }
+        this.getWebPImages(function() {
+            /**
+             * @property {Blob} blob - Recorded frames in video/webm blob.
+             * @memberof CanvasRecorder
+             * @example
+             * recorder.stop(function() {
+             *     var blob = recorder.blob;
+             * });
+             */
+            whammy.compile(function(blob) {
+                if (!config.disableLogs) {
+                    console.log('Recording finished!');
+                }
 
-            if (callback) {
-                callback(that.blob);
-            }
+                that.blob = blob;
 
-            whammy.frames = [];
+                if (that.blob.forEach) {
+                    that.blob = new Blob([], {
+                        type: 'video/webm'
+                    });
+                }
+
+                if (callback) {
+                    callback(that.blob);
+                }
+
+                whammy.frames = [];
+            });
         });
     };
 
@@ -94,8 +214,9 @@ function CanvasRecorder(htmlElement, config) {
     this.pause = function() {
         isPausedRecording = true;
 
-        if (!config.disableLogs) {
-            console.debug('Paused recording.');
+        if (mediaStreamRecorder instanceof MediaStreamRecorder) {
+            mediaStreamRecorder.pause();
+            return;
         }
     };
 
@@ -109,8 +230,13 @@ function CanvasRecorder(htmlElement, config) {
     this.resume = function() {
         isPausedRecording = false;
 
-        if (!config.disableLogs) {
-            console.debug('Resumed recording.');
+        if (mediaStreamRecorder instanceof MediaStreamRecorder) {
+            mediaStreamRecorder.resume();
+            return;
+        }
+
+        if (!isRecording) {
+            this.record();
         }
     };
 
@@ -122,38 +248,80 @@ function CanvasRecorder(htmlElement, config) {
      * recorder.clearRecordedData();
      */
     this.clearRecordedData = function() {
-        this.pause();
-
-        whammy.frames = [];
-
-        if (!config.disableLogs) {
-            console.debug('Cleared old recorded data.');
+        if (isRecording) {
+            this.stop(clearRecordedDataCB);
         }
+        clearRecordedDataCB();
     };
+
+    function clearRecordedDataCB() {
+        whammy.frames = [];
+        isRecording = false;
+        isPausedRecording = false;
+    }
+
+    // for debugging
+    this.name = 'CanvasRecorder';
+    this.toString = function() {
+        return this.name;
+    };
+
+    function cloneCanvas() {
+        //create a new canvas
+        var newCanvas = document.createElement('canvas');
+        var context = newCanvas.getContext('2d');
+
+        //set dimensions
+        newCanvas.width = htmlElement.width;
+        newCanvas.height = htmlElement.height;
+
+        //apply the old canvas to the new one
+        context.drawImage(htmlElement, 0, 0);
+
+        //return the new canvas
+        return newCanvas;
+    }
 
     function drawCanvasFrame() {
         if (isPausedRecording) {
             lastTime = new Date().getTime();
-            return setTimeout(drawCanvasFrame, 100);
+            return setTimeout(drawCanvasFrame, 500);
+        }
+
+        if (htmlElement.nodeName.toLowerCase() === 'canvas') {
+            var duration = new Date().getTime() - lastTime;
+            // via #206, by Jack i.e. @Seymourr
+            lastTime = new Date().getTime();
+
+            whammy.frames.push({
+                image: cloneCanvas(),
+                duration: duration
+            });
+
+            if (isRecording) {
+                setTimeout(drawCanvasFrame, config.frameInterval);
+            }
+            return;
         }
 
         html2canvas(htmlElement, {
+            grabMouse: typeof config.showMousePointer === 'undefined' || config.showMousePointer,
             onrendered: function(canvas) {
                 var duration = new Date().getTime() - lastTime;
                 if (!duration) {
-                    return drawCanvasFrame();
+                    return setTimeout(drawCanvasFrame, config.frameInterval);
                 }
 
                 // via #206, by Jack i.e. @Seymourr
                 lastTime = new Date().getTime();
 
                 whammy.frames.push({
-                    duration: duration,
-                    image: canvas.toDataURL('image/webp')
+                    image: canvas.toDataURL('image/webp', 1),
+                    duration: duration
                 });
 
                 if (isRecording) {
-                    setTimeout(drawCanvasFrame, 0);
+                    setTimeout(drawCanvasFrame, config.frameInterval);
                 }
             }
         });
@@ -162,4 +330,8 @@ function CanvasRecorder(htmlElement, config) {
     var lastTime = new Date().getTime();
 
     var whammy = new Whammy.Video(100);
+}
+
+if (typeof RecordRTC !== 'undefined') {
+    RecordRTC.CanvasRecorder = CanvasRecorder;
 }

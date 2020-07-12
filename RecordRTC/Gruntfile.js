@@ -7,6 +7,21 @@ module.exports = function(grunt) {
         scope: 'devDependencies'
     });
 
+    var versionNumber = grunt.file.readJSON('package.json').version;
+
+    var banner = '\'use strict\';\n\n';
+    banner += '// Last time updated: <%= grunt.template.today("UTC:yyyy-mm-dd h:MM:ss TT Z") %>\n\n';
+
+    banner += '// ________________\n';
+    banner += '// RecordRTC v' + versionNumber + '\n\n';
+
+    banner += '// Open-Sourced: https://github.com/muaz-khan/RecordRTC\n\n';
+
+    banner += '// --------------------------------------------------\n';
+    banner += '// Muaz Khan     - www.MuazKhan.com\n';
+    banner += '// MIT License   - www.WebRTC-Experiment.com/licence\n';
+    banner += '// --------------------------------------------------\n\n';
+
     // configure project
     grunt.initConfig({
         // make node configurations available
@@ -14,44 +29,54 @@ module.exports = function(grunt) {
         concat: {
             options: {
                 stripBanners: true,
-                separator: ''
+                separator: '\n',
+                banner: banner
             },
             dist: {
                 src: [
-                    'dev/head.js',
                     'dev/RecordRTC.js',
+                    'dev/RecordRTC.IndexedDB.js',
+                    'dev/RecordRTC-Configuration.js',
+                    'dev/GetRecorderType.js',
                     'dev/MRecordRTC.js',
+                    'dev/amd.js',
                     'dev/Cross-Browser-Declarations.js',
                     'dev/Storage.js',
+                    'dev/isMediaRecorderCompatible.js',
                     'dev/MediaStreamRecorder.js',
                     'dev/StereoAudioRecorder.js',
                     'dev/CanvasRecorder.js',
                     'dev/WhammyRecorder.js',
                     'dev/Whammy.js',
                     'dev/DiskStorage.js',
-                    'dev/GifRecorder.js'
+                    'dev/GifRecorder.js',
+                    'dev/MultiStreamsMixer.js', // github/muaz-khan/MultiStreamsMixer
+                    'dev/MultiStreamRecorder.js',
+                    'dev/RecordRTC.promises.js',
+                    'dev/WebAssemblyRecorder.js' // grunt-contrib-uglify fails; maybe we should use uglify-es instead?
                 ],
-                dest: 'RecordRTC.js',
+                dest: './temp/RecordRTC.js',
             },
         },
-        htmlhint: {
-            html1: {
-                src: [
-                    './Canvas-Recording/*.html',
-                    './MRecordRTC/*.html',
-                    './PHP-and-FFmpeg/*.html',
-                    './RecordRTC-over-Socketio/*.html',
-                    './RecordRTC-to-Nodejs/static/*.html',
-                    './RecordRTC-to-PHP/*.html'
-                ],
+        replace: {
+            dist: {
                 options: {
-                    'tag-pair': true
-                }
+                    patterns: [{
+                        match: 'version',
+                        replacement: versionNumber
+                    }]
+                },
+                files: [{
+                    expand: true,
+                    flatten: true,
+                    src: ['./temp/RecordRTC.js'],
+                    dest: './'
+                }]
             }
         },
+        clean: ['./temp'],
         jshint: {
             options: {
-
                 globals: {
                     webkitIndexedDB: true,
                     mozIndexedDB: true,
@@ -62,6 +87,7 @@ module.exports = function(grunt) {
                     postMessage: true,
                     Whammy: true,
                     WhammyRecorder: true,
+                    WebAssemblyRecorder: true,
                     MediaStreamRecorder: true,
                     StereoAudioRecorder: true,
                     RecordRTC: true,
@@ -75,6 +101,8 @@ module.exports = function(grunt) {
                     webkitCancelAnimationFrame: true,
                     mozRequestAnimationFrame: true,
                     mozCancelAnimationFrame: true,
+                    msRequestAnimationFrame: true,
+                    msCancelAnimationFrame: true,
                     MediaStream: true,
                     webkitMediaStream: true,
                     html2canvas: true,
@@ -84,9 +112,13 @@ module.exports = function(grunt) {
                     webkitAudioContext: true,
                     mozAudioContext: true,
                     AudioContext: true,
+                    Promise: true,
                     JSON: true,
                     typeof: true,
-                    define: true
+                    define: true,
+                    EBML: true,
+                    ReadableStream: true,
+                    WritableStream: true
                 },
                 browser: true,
                 browserify: true,
@@ -105,16 +137,12 @@ module.exports = function(grunt) {
                 typed: true,
                 worker: true
             },
-            files: ['RecordRTC.js'],
-            ignore_warning: {
-                options: {
-                    '-W015': true
-                }
-            }
+            files: ['RecordRTC.js']
         },
         uglify: {
             options: {
-                mangle: false
+                mangle: false,
+                banner: banner
             },
             my_target: {
                 files: {
@@ -122,17 +150,21 @@ module.exports = function(grunt) {
                 }
             }
         },
+        copy: {
+            main: {
+                options: {
+                    flatten: true
+                },
+                files: {
+                    'RecordRTC.js': ['RecordRTC.js']
+                },
+            },
+        },
         jsbeautifier: {
             files: [
                 // 'RecordRTC.js',
                 'dev/*.js',
-                'Gruntfile.js',
-                './Canvas-Recording/*.html',
-                './MRecordRTC/*.html',
-                './PHP-and-FFmpeg/*.html',
-                './RecordRTC-over-Socketio/*.html',
-                './RecordRTC-to-Nodejs/static/*.html',
-                './RecordRTC-to-PHP/*.html'
+                'Gruntfile.js'
             ],
             options: {
                 js: {
@@ -184,6 +216,15 @@ module.exports = function(grunt) {
                 pushTo: 'upstream',
                 gitDescribeOptions: '--tags --always --abbrev=1 --dirty=-d'
             }
+        },
+        watch: {
+            scripts: {
+                files: ['dev/*.js'],
+                tasks: ['concat', 'replace', 'jsbeautifier', 'jshint', 'copy', 'uglify', 'clean'],
+                options: {
+                    spawn: false,
+                },
+            }
         }
     });
 
@@ -191,5 +232,6 @@ module.exports = function(grunt) {
 
     // set default tasks to run when grunt is called without parameters
     // http://gruntjs.com/api/grunt.task
-    grunt.registerTask('default', ['concat', 'jsbeautifier', 'htmlhint', 'jshint', 'uglify']);
+    grunt.registerTask('default', ['concat', 'replace', 'jsbeautifier', 'jshint', 'copy', 'uglify', 'clean']);
+    grunt.loadNpmTasks('grunt-contrib-watch');
 };

@@ -1,11 +1,11 @@
 {
     "name": "detectrtc",
-    "version": "1.0.4",
+    "version": "1.4.0",
     "authors": [
         {
             "name": "Muaz Khan",
             "email": "muazkh@gmail.com",
-            "homepage": "http://www.muazkhan.com/"
+            "homepage": "https://muazkhan.com/"
         },
         {
             "name": "Kenneth Miles",

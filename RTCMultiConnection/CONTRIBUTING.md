@@ -1,6 +1,8 @@
-<a href="https://github.com/muaz-khan/RTCMultiConnection"><img src="https://i.imgur.com/MFfRBSM.png" /></a> / <a href="https://github.com/muaz-khan/RTCMultiConnection/wiki">Wiki Pages</a> / <a href="http://www.rtcmulticonnection.org/docs/">Documentation</a> / <a href="http://www.rtcmulticonnection.org/FAQ/">FAQ</a> / <a href="https://www.webrtc-experiment.com/RTCMultiConnection/">Demos</a> / <a href="http://www.rtcmulticonnection.org/changes-log/">Changes Log</a>
+<a href="https://github.com/muaz-khan/RTCMultiConnection"><img src="https://i.imgur.com/MFfRBSM.png" /></a>
 
-[![npm](https://img.shields.io/npm/v/rtcmulticonnection.svg)](https://npmjs.org/package/rtcmulticonnection) [![downloads](https://img.shields.io/npm/dm/rtcmulticonnection.svg)](https://npmjs.org/package/rtcmulticonnection) [![Build Status: Linux](https://travis-ci.org/muaz-khan/RTCMultiConnection.png?branch=master)](https://travis-ci.org/muaz-khan/RTCMultiConnection)
+## RTCMultiConnection
+
+> A WebRTC JavaScript Library
 
 # Contributors
 
@@ -12,21 +14,56 @@
 
 # Rules to Contribute
 
-```
-git clone --depth=50 --branch=master git://github.com/muaz-khan/RTCMultiConnection.git muaz-khan/RTCMultiConnection
+Git clone:
 
-# install all dependencies
-npm install
+```sh
+mkdir RTCMultiConnection
+cd RTCMultiConnection
+git clone --depth=50 --branch=master git://github.com/muaz-khan/RTCMultiConnection.git ./
+```
+
+or download ZIP:
+
+```sh
+# or MOST preferred one
+wget https://github.com/muaz-khan/RTCMultiConnection/archive/master.zip
+unzip master.zip 
+cd RTCMultiConnection-master
+ls -a
+```
+
+## Install Grunt
+
+```sh
+mkdir node_modules
+npm install --save-dev
 
 # install grunt for code style verifications
-npm install grunt-cli
-npm install grunt
+npm install grunt-cli@0.1.13 -g
 
-# verify your changes
-npm test  # or "grunt"
+npm install grunt@0.4.5
+npm install grunt-bump@0.7.0
+npm install grunt-cli@0.1.13
+npm install grunt-contrib-clean@0.6.0
+npm install grunt-contrib-concat@0.5.1
+npm install grunt-contrib-copy@0.8.2
+npm install grunt-contrib-uglify@0.11.0
+npm install grunt-contrib-watch@1.1.0
+npm install grunt-jsbeautifier@0.2.10
+npm install grunt-replace@0.11.0
+npm install load-grunt-tasks@3.4.0
+```
+
+## Compile distribution
+
+```sh
+grunt
+
+# or auto compile
+grunt watch
+```
 
 # Success? Make a pull request!
-```
 
 ## License
 

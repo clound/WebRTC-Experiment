@@ -4,6 +4,8 @@
 /**
  * WhammyRecorder is a standalone class used by {@link RecordRTC} to bring video recording in Chrome. It runs top over {@link Whammy}.
  * @summary Video recording feature in Chrome.
+ * @license {@link https://github.com/muaz-khan/RecordRTC/blob/master/LICENSE|MIT}
+ * @author {@link https://MuazKhan.com|Muaz Khan}
  * @typedef WhammyRecorder
  * @class
  * @example
@@ -12,6 +14,7 @@
  * recorder.stop(function(blob) {
  *     video.src = URL.createObjectURL(blob);
  * });
+ * @see {@link https://github.com/muaz-khan/RecordRTC|RecordRTC Source Code}
  * @param {MediaStream} mediaStream - MediaStream object fetched using getUserMedia API or generated using captureStreamUntilEnded or WebAudio API.
  * @param {object} config - {disableLogs: true, initCallback: function, video: HTMLVideoElement, etc.}
  */
@@ -58,8 +61,8 @@ function WhammyRecorder(mediaStream, config) {
             };
         }
 
-        canvas.width = config.canvas.width;
-        canvas.height = config.canvas.height;
+        canvas.width = config.canvas.width || 320;
+        canvas.height = config.canvas.height || 240;
 
         context = canvas.getContext('2d');
 
@@ -73,11 +76,7 @@ function WhammyRecorder(mediaStream, config) {
         } else {
             video = document.createElement('video');
 
-            if (typeof video.srcObject !== 'undefined') {
-                video.srcObject = mediaStream;
-            } else {
-                video.src = URL.createObjectURL(mediaStream);
-            }
+            setSrcObject(mediaStream, video);
 
             video.onloadedmetadata = function() { // "onloadedmetadata" may NOT work in FF?
                 if (config.initCallback) {
@@ -140,6 +139,25 @@ function WhammyRecorder(mediaStream, config) {
         }
     }
 
+    function asyncLoop(o) {
+        var i = -1,
+            length = o.length;
+
+        (function loop() {
+            i++;
+            if (i === length) {
+                o.callback();
+                return;
+            }
+
+            // "setTimeout" added by Jim McLeod
+            setTimeout(function() {
+                o.functionToLoop(loop, i);
+            }, 1);
+        })();
+    }
+
+
     /**
      * remove black frames from the beginning to the specified frame
      * @param {Array} _frames - array of frames to be checked
@@ -149,7 +167,7 @@ function WhammyRecorder(mediaStream, config) {
      * @returns {Array} - array of frames
      */
     // pull#293 by @volodalexey
-    function dropBlackFrames(_frames, _framesToCheck, _pixTolerance, _frameTolerance) {
+    function dropBlackFrames(_frames, _framesToCheck, _pixTolerance, _frameTolerance, callback) {
         var localCanvas = document.createElement('canvas');
         localCanvas.width = canvas.width;
         localCanvas.height = canvas.height;
@@ -173,56 +191,67 @@ function WhammyRecorder(mediaStream, config) {
         var frameTolerance = _frameTolerance && _frameTolerance >= 0 && _frameTolerance <= 1 ? _frameTolerance : 0;
         var doNotCheckNext = false;
 
-        for (var f = 0; f < endCheckFrame; f++) {
-            var matchPixCount, endPixCheck, maxPixCount;
+        asyncLoop({
+            length: endCheckFrame,
+            functionToLoop: function(loop, f) {
+                var matchPixCount, endPixCheck, maxPixCount;
 
-            if (!doNotCheckNext) {
-                var image = new Image();
-                image.src = _frames[f].image;
-                context2d.drawImage(image, 0, 0, canvas.width, canvas.height);
-                var imageData = context2d.getImageData(0, 0, canvas.width, canvas.height);
-                matchPixCount = 0;
-                endPixCheck = imageData.data.length;
-                maxPixCount = imageData.data.length / 4;
-
-                for (var pix = 0; pix < endPixCheck; pix += 4) {
-                    var currentColor = {
-                        r: imageData.data[pix],
-                        g: imageData.data[pix + 1],
-                        b: imageData.data[pix + 2]
-                    };
-                    var colorDifference = Math.sqrt(
-                        Math.pow(currentColor.r - sampleColor.r, 2) +
-                        Math.pow(currentColor.g - sampleColor.g, 2) +
-                        Math.pow(currentColor.b - sampleColor.b, 2)
-                    );
-                    // difference in color it is difference in color vectors (r1,g1,b1) <=> (r2,g2,b2)
-                    if (colorDifference <= maxColorDifference * pixTolerance) {
-                        matchPixCount++;
+                var finishImage = function() {
+                    if (!doNotCheckNext && maxPixCount - matchPixCount <= maxPixCount * frameTolerance) {
+                        // console.log('removed black frame : ' + f + ' ; frame duration ' + _frames[f].duration);
+                    } else {
+                        // console.log('frame is passed : ' + f);
+                        if (checkUntilNotBlack) {
+                            doNotCheckNext = true;
+                        }
+                        resultFrames.push(_frames[f]);
                     }
+                    loop();
+                };
+
+                if (!doNotCheckNext) {
+                    var image = new Image();
+                    image.onload = function() {
+                        context2d.drawImage(image, 0, 0, canvas.width, canvas.height);
+                        var imageData = context2d.getImageData(0, 0, canvas.width, canvas.height);
+                        matchPixCount = 0;
+                        endPixCheck = imageData.data.length;
+                        maxPixCount = imageData.data.length / 4;
+
+                        for (var pix = 0; pix < endPixCheck; pix += 4) {
+                            var currentColor = {
+                                r: imageData.data[pix],
+                                g: imageData.data[pix + 1],
+                                b: imageData.data[pix + 2]
+                            };
+                            var colorDifference = Math.sqrt(
+                                Math.pow(currentColor.r - sampleColor.r, 2) +
+                                Math.pow(currentColor.g - sampleColor.g, 2) +
+                                Math.pow(currentColor.b - sampleColor.b, 2)
+                            );
+                            // difference in color it is difference in color vectors (r1,g1,b1) <=> (r2,g2,b2)
+                            if (colorDifference <= maxColorDifference * pixTolerance) {
+                                matchPixCount++;
+                            }
+                        }
+                        finishImage();
+                    };
+                    image.src = _frames[f].image;
+                } else {
+                    finishImage();
                 }
-            }
+            },
+            callback: function() {
+                resultFrames = resultFrames.concat(_frames.slice(endCheckFrame));
 
-            if (!doNotCheckNext && maxPixCount - matchPixCount <= maxPixCount * frameTolerance) {
-                // console.log('removed black frame : ' + f + ' ; frame duration ' + _frames[f].duration);
-            } else {
-                // console.log('frame is passed : ' + f);
-                if (checkUntilNotBlack) {
-                    doNotCheckNext = true;
+                if (resultFrames.length <= 0) {
+                    // at least one last frame should be available for next manipulation
+                    // if total duration of all frames will be < 1000 than ffmpeg doesn't work well...
+                    resultFrames.push(_frames[_frames.length - 1]);
                 }
-                resultFrames.push(_frames[f]);
+                callback(resultFrames);
             }
-        }
-
-        resultFrames = resultFrames.concat(_frames.slice(endCheckFrame));
-
-        if (resultFrames.length <= 0) {
-            // at least one last frame should be available for next manipulation
-            // if total duration of all frames will be < 1000 than ffmpeg doesn't work well...
-            resultFrames.push(_frames[_frames.length - 1]);
-        }
-
-        return resultFrames;
+        });
     }
 
     var isStopDrawing = false;
@@ -238,6 +267,8 @@ function WhammyRecorder(mediaStream, config) {
      * });
      */
     this.stop = function(callback) {
+        callback = callback || function() {};
+
         isStopDrawing = true;
 
         var _this = this;
@@ -246,33 +277,35 @@ function WhammyRecorder(mediaStream, config) {
             // e.g. dropBlackFrames(frames, 10, 1, 1) - will cut all 10 frames
             // e.g. dropBlackFrames(frames, 10, 0.5, 0.5) - will analyse 10 frames
             // e.g. dropBlackFrames(frames, 10) === dropBlackFrames(frames, 10, 0, 0) - will analyse 10 frames with strict black color
-            whammy.frames = dropBlackFrames(whammy.frames, -1);
+            dropBlackFrames(whammy.frames, -1, null, null, function(frames) {
+                whammy.frames = frames;
 
-            // to display advertisement images!
-            if (config.advertisement && config.advertisement.length) {
-                whammy.frames = config.advertisement.concat(whammy.frames);
-            }
-
-            /**
-             * @property {Blob} blob - Recorded frames in video/webm blob.
-             * @memberof WhammyRecorder
-             * @example
-             * recorder.stop(function() {
-             *     var blob = recorder.blob;
-             * });
-             */
-            whammy.compile(function(blob) {
-                _this.blob = blob;
-
-                if (_this.blob.forEach) {
-                    _this.blob = new Blob([], {
-                        type: 'video/webm'
-                    });
+                // to display advertisement images!
+                if (config.advertisement && config.advertisement.length) {
+                    whammy.frames = config.advertisement.concat(whammy.frames);
                 }
 
-                if (callback) {
-                    callback(_this.blob);
-                }
+                /**
+                 * @property {Blob} blob - Recorded frames in video/webm blob.
+                 * @memberof WhammyRecorder
+                 * @example
+                 * recorder.stop(function() {
+                 *     var blob = recorder.blob;
+                 * });
+                 */
+                whammy.compile(function(blob) {
+                    _this.blob = blob;
+
+                    if (_this.blob.forEach) {
+                        _this.blob = new Blob([], {
+                            type: 'video/webm'
+                        });
+                    }
+
+                    if (callback) {
+                        callback(_this.blob);
+                    }
+                });
             });
         }, 10);
     };
@@ -288,10 +321,6 @@ function WhammyRecorder(mediaStream, config) {
      */
     this.pause = function() {
         isPausedRecording = true;
-
-        if (!config.disableLogs) {
-            console.debug('Paused recording.');
-        }
     };
 
     /**
@@ -304,8 +333,8 @@ function WhammyRecorder(mediaStream, config) {
     this.resume = function() {
         isPausedRecording = false;
 
-        if (!config.disableLogs) {
-            console.debug('Resumed recording.');
+        if (isStopDrawing) {
+            this.record();
         }
     };
 
@@ -317,9 +346,22 @@ function WhammyRecorder(mediaStream, config) {
      * recorder.clearRecordedData();
      */
     this.clearRecordedData = function() {
-        this.pause();
+        if (!isStopDrawing) {
+            this.stop(clearRecordedDataCB);
+        }
+        clearRecordedDataCB();
+    };
 
+    function clearRecordedDataCB() {
         whammy.frames = [];
+        isStopDrawing = true;
+        isPausedRecording = false;
+    }
+
+    // for debugging
+    this.name = 'WhammyRecorder';
+    this.toString = function() {
+        return this.name;
     };
 
     var canvas = document.createElement('canvas');
@@ -328,4 +370,8 @@ function WhammyRecorder(mediaStream, config) {
     var video;
     var lastTime;
     var whammy;
+}
+
+if (typeof RecordRTC !== 'undefined') {
+    RecordRTC.WhammyRecorder = WhammyRecorder;
 }
